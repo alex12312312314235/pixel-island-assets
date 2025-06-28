@@ -1,75 +1,82 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tropical Island Paradise</title>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
   <style>
-    body {
-      margin: 0;
-      background: #a6ddf0;
-    }
-    canvas {
-      display: block;
-      margin: 0 auto;
-    }
+    body{margin:0;padding:20px;background:linear-gradient(135deg,#87CEEB 0%,#4682B4 100%);display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif}
+    #game-container{border:4px solid #2E86AB;border-radius:15px;box-shadow:0 15px 35px rgba(0,0,0,.4);overflow:hidden;position:relative}
+    .loading-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(135,206,235,.95),rgba(70,130,180,.95));display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:1000;transition:all .6s ease-out}
+    .loading-text{color:#fff;font-size:28px;font-weight:bold;text-shadow:3px 3px 6px rgba(0,0,0,.7);margin-bottom:25px;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+    .loading-bar{width:350px;height:25px;background:rgba(255,255,255,.3);border-radius:15px;border:3px solid #fff;box-shadow:0 4px 8px rgba(0,0,0,.3);overflow:hidden}
+    .loading-progress{height:100%;background:linear-gradient(90deg,#32CD32,#228B22,#90EE90);width:0%;transition:width .4s ease;border-radius:12px}
+    .status-info{margin-top:20px;color:rgba(255,255,255,.9);font-size:16px;text-shadow:1px 1px 2px rgba(0,0,0,.5)}
   </style>
 </head>
 <body>
+  <div id="game-container">
+    <div class="loading-overlay" id="loading-overlay">
+      <div class="loading-text" id="loading-text">🏝️ Loading Tropical Paradise...</div>
+      <div class="loading-bar"><div class="loading-progress" id="loading-progress"></div></div>
+      <div class="status-info" id="status-info">Fetching assets from GitHub Pages...</div>
+    </div>
+  </div>
+
   <script>
-    const config = {
-      type: Phaser.AUTO,
-      width: 800,
-      height: 600,
-      backgroundColor: '#a6ddf0',
-      scene: {
-        preload,
-        create
-      }
-    };
+  class TropicalIslandScene extends Phaser.Scene {
+    constructor(){super('TropicalIslandScene');}
+    preload(){
+      this.load.setBaseURL('https://alex12312312314235.github.io/pixel-island-assets/');
 
-    const game = new Phaser.Game(config);
+      // --- sprite atlases ---
+      this.load.atlas('terrain','terrain_flora.png','terrain_flora.json');
+      this.load.atlas('fish','fish_characters.png','fish_characters.json');
 
-    function preload() {
-      this.load.atlas(
-        'terrain',
-        'https://alex12312312314235.github.io/pixel-island-assets/terrain_flora.png',
-        'https://alex12312312314235.github.io/pixel-island-assets/terrain_flora.json'
-      );
-
-      this.load.atlas(
-        'fish',
-        'https://alex12312312314235.github.io/pixel-island-assets/fish_characters.png',
-        'https://alex12312312314235.github.io/pixel-island-assets/fish_characters.json'
-      );
+      // progress bar
+      const bar=document.getElementById('loading-progress'),txt=document.getElementById('loading-text'),info=document.getElementById('status-info');
+      this.load.on('progress',v=>{bar.style.width=`${v*100}%`;txt.textContent=`🏝️ Loading... ${Math.round(v*100)}%`;});
+      this.load.on('fileload',(_,__,___,f)=>{info.textContent=`✅ Loaded: ${f.url.split('/').pop()}`;});
+      this.load.on('complete',()=>{info.textContent='🎉 All assets loaded!';setTimeout(()=>document.getElementById('loading-overlay').style.display='none',600);});
+      this.load.on('loaderror',f=>{txt.textContent='❌ Load error';info.textContent=`Failed: ${f.url.split('/').pop()}`;info.style.color='#ff6b6b';});
     }
+    create(){
+      // sky-blue background
+      this.add.rectangle(400,300,800,600,0x87CEEB);
 
-    function create() {
-      // Background island sand
-      this.add.image(400, 350, 'terrain', 'sand_irregular');
+      // island
+      const sand=this.add.image(380,340,'terrain','sand_irregular').setScale(2.5);
+      const palm1=this.add.image(300,260,'terrain','palm_big').setScale(1.8).setOrigin(.5,1);
+      const palm2=this.add.image(500,280,'terrain','palm_small').setScale(2.0).setOrigin(.5,1);
+      const bush=this.add.image(420,320,'terrain','bush_medium').setScale(1.8);
 
-      // Palm trees
-      this.add.image(340, 240, 'terrain', 'palm_big').setOrigin(0.5, 1);
-      this.add.image(460, 260, 'terrain', 'palm_small').setOrigin(0.5, 1);
+      // fish
+      const fish1=this.add.image(150,200,'fish','fish_blue').setScale(3.5),
+            fish2=this.add.image(650,450,'fish','fish_yellow').setScale(3.2);
 
-      // Bush
-      this.add.image(400, 310, 'terrain', 'bush_medium');
+      // simple tweens
+      this.tweens.add({targets:[palm1],rotation:.18,duration:4000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+      this.tweens.add({targets:[palm2],rotation:-.15,duration:4500,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:1500});
+      this.tweens.add({targets:fish1,x:250,y:170,duration:7000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+      this.tweens.add({targets:fish2,x:550,y:480,duration:8000,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:2000});
 
-      // Fish in ocean
-      this.add.image(250, 500, 'fish', 'fish_blue').setScale(1.2);
-      this.add.image(550, 480, 'fish', 'fish_yellow').setScale(1.2);
-
-      // Title text
-      this.add.text(400, 30, '🌴 TROPICAL ISLAND PARADISE 🌴', {
-        font: '24px Arial',
-        fill: '#ffffff'
-      }).setOrigin(0.5);
-
-      this.add.text(400, 60, 'A Pixel Art Adventure', {
-        font: '16px Arial',
-        fill: '#ffffff'
-      }).setOrigin(0.5);
+      // title
+      this.add.text(400,50,'🌴 TROPICAL ISLAND PARADISE 🌴',{fontSize:'32px',fontFamily:'Arial',fill:'#fff',stroke:'#2E86AB',strokeThickness:6}).setOrigin(.5);
     }
+  }
+
+  new Phaser.Game({
+    type:Phaser.AUTO,
+    width:800,
+    height:600,
+    parent:'game-container',
+    backgroundColor:'#87CEEB',
+    scene:TropicalIslandScene,
+    scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
+    render:{pixelArt:true,antialias:false,roundPixels:true}
+  });
   </script>
 </body>
 </html>
