@@ -26,103 +26,678 @@
   </div>
 
   <script>
+  // ===== CONSTANTS =====
+  const GAME_WIDTH = 800;
+  const GAME_HEIGHT = 600;
+  const COLORS = {
+    SKY: 0x87CEEB,
+    WHITE: 0xFFFFFF,
+    BLACK: 0x000000,
+    BLUE: 0x2E86AB,
+    GREEN: 0x32CD32,
+    RED: 0xFF6B6B,
+    YELLOW: 0xFFD700
+  };
+
+  // Fish types that can be caught
+  const FISH_TYPES = [
+    {key: 'fish_blue', name: 'Blue Fish', rarity: 'Common'},
+    {key: 'fish_yellow', name: 'Yellow Fish', rarity: 'Common'},
+    {key: 'fish_orange', name: 'Orange Fish', rarity: 'Common'},
+    {key: 'fish_red', name: 'Red Fish', rarity: 'Uncommon'},
+    {key: 'fish_green', name: 'Green Fish', rarity: 'Uncommon'},
+    {key: 'fish_purple', name: 'Purple Fish', rarity: 'Rare'},
+    {key: 'angelfish', name: 'Angelfish', rarity: 'Rare'},
+    {key: 'fish_shark_small', name: 'Small Shark', rarity: 'Epic'}
+  ];
+
+  // ===== MAIN GAME SCENE =====
   class TropicalIslandScene extends Phaser.Scene {
-    constructor(){super('TropicalIslandScene');}
-    preload(){
+    constructor() {
+      super('TropicalIslandScene');
+      this.fishingMinigame = null;
+    }
+
+    preload() {
       // Use relative paths - works locally AND on GitHub Pages
-      // this.load.setBaseURL('https://alex12312312314235.github.io/pixel-island-assets/');
+      this.load.atlas('terrain', 'terrain_flora.png', 'terrain_flora.json');
+      this.load.atlas('fish', 'fish_characters.png', 'fish_characters.json');
 
-      // --- sprite atlases ---
-      this.load.atlas('terrain','terrain_flora.png','terrain_flora.json');
-      this.load.atlas('fish','fish_characters.png','fish_characters.json');
+      // Progress bar feedback
+      const bar = document.getElementById('loading-progress');
+      const txt = document.getElementById('loading-text');
+      const info = document.getElementById('status-info');
 
-      // progress bar and loading feedback
-      const bar=document.getElementById('loading-progress'),txt=document.getElementById('loading-text'),info=document.getElementById('status-info');
-      this.load.on('progress',v=>{
-        bar.style.width=`${v*100}%`;
-        txt.textContent=`🏝️ Loading... ${Math.round(v*100)}%`;
-        console.log(`Loading progress: ${Math.round(v*100)}%`);
+      this.load.on('progress', v => {
+        bar.style.width = `${v * 100}%`;
+        txt.textContent = `🏝️ Loading... ${Math.round(v * 100)}%`;
+        console.log(`Loading progress: ${Math.round(v * 100)}%`);
       });
-      this.load.on('fileload',(_,__,___,f)=>{
-        const filename=f.url.split('/').pop();
-        info.textContent=`✅ Loaded: ${filename}`;
+
+      this.load.on('fileload', (_, __, ___, f) => {
+        const filename = f.url.split('/').pop();
+        info.textContent = `✅ Loaded: ${filename}`;
         console.log(`✅ Successfully loaded: ${filename}`);
       });
-      this.load.on('complete',()=>{
-        info.textContent='🎉 All assets loaded!';
+
+      this.load.on('complete', () => {
+        info.textContent = '🎉 All assets loaded!';
         console.log('🎉 All assets loaded successfully!');
-        setTimeout(()=>document.getElementById('loading-overlay').style.display='none',600);
+        setTimeout(() => document.getElementById('loading-overlay').style.display = 'none', 600);
       });
-      this.load.on('loaderror',f=>{
-        const filename=f.url.split('/').pop();
-        txt.textContent='❌ Load error';
-        info.textContent=`Failed: ${filename}`;
-        info.style.color='#ff6b6b';
-        console.error(`❌ Failed to load: ${filename}`);
-        console.error('Full URL:', f.url);
-        console.error('Check that the file exists in the same directory as index.html');
+
+      this.load.on('loaderror', f => {
+        const filename = f.url.split('/').pop();
+        txt.textContent = '❌ Load error';
+        info.textContent = `Failed: ${filename}`;
+        info.style.color = '#ff6b6b';
+        console.error(`❌ Failed to load: ${filename}`, f.url);
       });
     }
-    create(){
+
+    create() {
       console.log('🎮 Creating game scene...');
 
-      // sky-blue background
-      this.add.rectangle(400,300,800,600,0x87CEEB);
+      // Verify atlases loaded
+      if (!this.textures.exists('terrain') || !this.textures.exists('fish')) {
+        console.error('❌ Atlases not loaded!');
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'ERROR: Failed to load assets', {
+          fontSize: '24px',
+          fill: '#ff0000'
+        }).setOrigin(0.5);
+        return;
+      }
 
-      try {
-        // Verify atlases are loaded
-        if(!this.textures.exists('terrain')){
-          console.error('❌ terrain atlas not loaded!');
-          this.add.text(400,300,'ERROR: terrain atlas failed to load',{fontSize:'24px',fill:'#ff0000'}).setOrigin(.5);
-          return;
-        }
-        if(!this.textures.exists('fish')){
-          console.error('❌ fish atlas not loaded!');
-          this.add.text(400,300,'ERROR: fish atlas failed to load',{fontSize:'24px',fill:'#ff0000'}).setOrigin(.5);
-          return;
-        }
-        console.log('✅ Both atlases loaded successfully');
+      // Sky background
+      this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, COLORS.SKY);
 
-        // island
-        console.log('Creating island elements...');
-        const sand=this.add.image(380,340,'terrain','sand_irregular').setScale(2.5);
-        const palm1=this.add.image(300,260,'terrain','palm_big').setScale(1.8).setOrigin(.5,1);
-        const palm2=this.add.image(500,280,'terrain','palm_small').setScale(2.0).setOrigin(.5,1);
-        const bush=this.add.image(420,320,'terrain','bush_medium').setScale(1.8);
-        console.log('✅ Island elements created');
+      // Create island scenery
+      this.createIsland();
 
-        // fish
-        console.log('Creating fish...');
-        const fish1=this.add.image(150,200,'fish','fish_blue').setScale(3.5),
-              fish2=this.add.image(650,450,'fish','fish_yellow').setScale(3.2);
-        console.log('✅ Fish created');
+      // Create animated water effects
+      this.createWaterEffects();
 
-        // simple tweens
-        this.tweens.add({targets:[palm1],rotation:.18,duration:4000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
-        this.tweens.add({targets:[palm2],rotation:-.15,duration:4500,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:1500});
-        this.tweens.add({targets:fish1,x:250,y:170,duration:7000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
-        this.tweens.add({targets:fish2,x:550,y:480,duration:8000,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:2000});
-        console.log('✅ Animations created');
+      // Create swimming fish
+      this.createSwimmingFish();
 
-        // title
-        this.add.text(400,50,'🌴 TROPICAL ISLAND PARADISE 🌴',{fontSize:'32px',fontFamily:'Arial',fill:'#fff',stroke:'#2E86AB',strokeThickness:6}).setOrigin(.5);
-        console.log('✅ Scene creation complete!');
-      } catch(error) {
-        console.error('❌ Error creating scene:', error);
-        this.add.text(400,300,'ERROR: '+error.message,{fontSize:'24px',fill:'#ff0000',wordWrap:{width:700}}).setOrigin(.5);
+      // Create fishing spot
+      this.createFishingSpot();
+
+      // Title
+      this.add.text(GAME_WIDTH / 2, 50, '🌴 TROPICAL ISLAND PARADISE 🌴', {
+        fontSize: '32px',
+        fontFamily: 'Arial',
+        fill: '#fff',
+        stroke: '#2E86AB',
+        strokeThickness: 6
+      }).setOrigin(0.5);
+
+      // Instructions
+      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 30, 'Click the fishing spot to fish!', {
+        fontSize: '18px',
+        fill: '#fff',
+        stroke: '#2E86AB',
+        strokeThickness: 4
+      }).setOrigin(0.5);
+
+      console.log('✅ Scene creation complete!');
+    }
+
+    createIsland() {
+      // Sand island base
+      const sand = this.add.image(380, 340, 'terrain', 'sand_irregular').setScale(2.5);
+
+      // Palm trees
+      const palm1 = this.add.image(300, 260, 'terrain', 'palm_big')
+        .setScale(1.8)
+        .setOrigin(0.5, 1);
+      const palm2 = this.add.image(500, 280, 'terrain', 'palm_small')
+        .setScale(2.0)
+        .setOrigin(0.5, 1);
+
+      // Bushes
+      const bush = this.add.image(420, 320, 'terrain', 'bush_medium').setScale(1.8);
+
+      // Animate palms swaying
+      this.tweens.add({
+        targets: palm1,
+        rotation: 0.18,
+        duration: 4000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      this.tweens.add({
+        targets: palm2,
+        rotation: -0.15,
+        duration: 4500,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: 1500
+      });
+
+      console.log('✅ Island created');
+    }
+
+    createWaterEffects() {
+      // Waves at different depths
+      const wave1 = this.add.image(150, 480, 'terrain', 'wave_shallow')
+        .setScale(2)
+        .setAlpha(0.6);
+      const wave2 = this.add.image(600, 500, 'terrain', 'wave_shallow')
+        .setScale(2)
+        .setAlpha(0.6);
+
+      // Animate waves
+      this.tweens.add({
+        targets: [wave1, wave2],
+        x: '+=20',
+        duration: 3000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      console.log('✅ Water effects created');
+    }
+
+    createSwimmingFish() {
+      // Background fish swimming around
+      const fish1 = this.add.image(150, 200, 'fish', 'fish_blue').setScale(3.5);
+      const fish2 = this.add.image(650, 450, 'fish', 'fish_yellow').setScale(3.2);
+
+      // Animate fish swimming
+      this.tweens.add({
+        targets: fish1,
+        x: 250,
+        y: 170,
+        duration: 7000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      this.tweens.add({
+        targets: fish2,
+        x: 550,
+        y: 480,
+        duration: 8000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: 2000
+      });
+
+      console.log('✅ Swimming fish created');
+    }
+
+    createFishingSpot() {
+      // Fishing spot indicator
+      const fishingX = 100;
+      const fishingY = 380;
+
+      // Visual indicator - log/dock
+      const dock = this.add.image(fishingX, fishingY, 'terrain', 'log_large')
+        .setScale(1.5)
+        .setAlpha(0.9);
+
+      // Interactive area
+      const clickArea = this.add.circle(fishingX, fishingY, 50, COLORS.BLUE, 0.3)
+        .setInteractive({ useHandCursor: true })
+        .setStrokeStyle(3, COLORS.WHITE);
+
+      // Hover effect
+      clickArea.on('pointerover', () => {
+        clickArea.setFillStyle(COLORS.BLUE, 0.5);
+        this.tweens.add({
+          targets: clickArea,
+          scale: 1.1,
+          duration: 200
+        });
+      });
+
+      clickArea.on('pointerout', () => {
+        clickArea.setFillStyle(COLORS.BLUE, 0.3);
+        this.tweens.add({
+          targets: clickArea,
+          scale: 1.0,
+          duration: 200
+        });
+      });
+
+      // Start fishing on click
+      clickArea.on('pointerdown', () => {
+        this.startFishing();
+      });
+
+      // Floating prompt
+      const prompt = this.add.text(fishingX, fishingY - 60, '🎣', {
+        fontSize: '32px'
+      }).setOrigin(0.5);
+
+      // Animate prompt
+      this.tweens.add({
+        targets: prompt,
+        y: fishingY - 70,
+        duration: 1000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      console.log('✅ Fishing spot created');
+    }
+
+    startFishing() {
+      if (this.fishingMinigame) return; // Already fishing
+
+      console.log('🎣 Starting fishing mini-game...');
+      this.fishingMinigame = new FishingMinigame(this, this.onFishingComplete.bind(this));
+    }
+
+    onFishingComplete(success, caughtFish) {
+      this.fishingMinigame = null;
+
+      if (success && caughtFish) {
+        console.log(`🎉 Caught a ${caughtFish.name}!`);
+      } else {
+        console.log('😢 The fish got away...');
       }
     }
   }
 
+  // ===== FISHING MINI-GAME =====
+  class FishingMinigame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.state = 'waiting'; // waiting, hooking, reeling, success, fail
+      this.hookTimer = null;
+      this.targetArrow = null;
+      this.playerArrow = null;
+      this.targetPosition = 0;
+      this.playerPosition = 0;
+      this.reelingTime = 0;
+      this.maxReelingTime = 3000; // 3 seconds to reel in
+      this.selectedFish = null;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Container for entire mini-game
+      this.container = this.scene.add.container(0, 0);
+      this.container.setDepth(100);
+
+      // Semi-transparent overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.7)
+        .setOrigin(0);
+      this.container.add(overlay);
+
+      // GameBoy-style window
+      const windowWidth = 500;
+      const windowHeight = 350;
+
+      // White outer border (GameBoy style)
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, windowWidth + 20, windowHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      // Inner window
+      const window = this.scene.add.rectangle(centerX, centerY, windowWidth, windowHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(window);
+
+      // Title bar
+      const titleBg = this.scene.add.rectangle(centerX, centerY - 140, windowWidth - 20, 50, 0x0F380F);
+      this.container.add(titleBg);
+
+      const title = this.scene.add.text(centerX, centerY - 140, '🎣 FISHING MINI-GAME', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions text
+      this.instructionText = this.scene.add.text(centerX, centerY - 80, 'Wait for the fish to bite...', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(this.instructionText);
+
+      // Fishing rod visual
+      const rod = this.scene.add.rectangle(centerX - 100, centerY - 20, 8, 120, 0x8B4513);
+      this.container.add(rod);
+
+      // Fishing line
+      this.fishingLine = this.scene.add.line(0, centerX - 100, centerY + 40, centerX + 50, centerY + 60, 0x0F380F)
+        .setLineWidth(2);
+      this.container.add(this.fishingLine);
+
+      // Hook
+      this.hook = this.scene.add.circle(centerX + 50, centerY + 60, 8, COLORS.BLACK);
+      this.container.add(this.hook);
+
+      // Arrow UI container (hidden initially)
+      this.arrowContainer = this.scene.add.container(centerX, centerY + 60);
+      this.arrowContainer.setVisible(false);
+      this.container.add(this.arrowContainer);
+
+      // Create arrow track
+      const trackWidth = 300;
+      const track = this.scene.add.rectangle(0, 0, trackWidth, 60, 0x0F380F);
+      this.arrowContainer.add(track);
+
+      const trackInner = this.scene.add.rectangle(0, 0, trackWidth - 8, 52, 0x8BAC0F);
+      this.arrowContainer.add(trackInner);
+
+      // Target zone (changes position)
+      this.targetZone = this.scene.add.rectangle(0, 0, 50, 52, COLORS.GREEN, 0.5)
+        .setStrokeStyle(3, COLORS.GREEN);
+      this.arrowContainer.add(this.targetZone);
+
+      // Player arrow (you control this)
+      this.playerArrow = this.scene.add.triangle(0, 0, 0, -20, -15, 20, 15, 20, COLORS.RED);
+      this.arrowContainer.add(this.playerArrow);
+
+      // Progress bar for reeling
+      this.progressBar = this.scene.add.rectangle(centerX, centerY + 130, 0, 20, COLORS.GREEN)
+        .setOrigin(0, 0.5);
+      this.progressBar.setVisible(false);
+      this.container.add(this.progressBar);
+
+      // Result fish display
+      this.resultFish = this.scene.add.image(centerX, centerY + 20, 'fish', 'fish_blue')
+        .setScale(5)
+        .setVisible(false);
+      this.container.add(this.resultFish);
+
+      // Close button (only shows after completion)
+      this.closeButton = this.scene.add.rectangle(centerX, centerY + 130, 150, 40, 0x0F380F)
+        .setInteractive({ useHandCursor: true })
+        .setVisible(false);
+      this.container.add(this.closeButton);
+
+      const closeText = this.scene.add.text(centerX, centerY + 130, 'CLOSE', {
+        fontSize: '20px',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      closeText.setVisible(false);
+      this.container.add(closeText);
+
+      this.closeButton.on('pointerdown', () => this.close());
+      this.closeButtonText = closeText;
+
+      // Start the fishing sequence
+      this.startWaitingPhase();
+
+      // Input handling
+      this.scene.input.keyboard.on('keydown-SPACE', () => this.onSpacePress());
+      this.scene.input.on('pointerdown', () => this.onSpacePress());
+    }
+
+    startWaitingPhase() {
+      this.state = 'waiting';
+      this.instructionText.setText('Wait for the fish to bite...');
+
+      // Animate hook bobbing
+      this.scene.tweens.add({
+        targets: [this.hook, this.fishingLine],
+        y: '+=10',
+        duration: 800,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      // Random delay before fish bites (1-3 seconds)
+      const delay = Phaser.Math.Between(1000, 3000);
+      this.hookTimer = this.scene.time.delayedCall(delay, () => {
+        this.startHookingPhase();
+      });
+    }
+
+    startHookingPhase() {
+      this.state = 'hooking';
+      this.instructionText.setText('❗ PRESS SPACE or CLICK NOW! ❗');
+      this.instructionText.setFontSize('22px');
+      this.instructionText.setStyle({ fill: '#FF0000' });
+
+      // Make hook shake
+      this.scene.tweens.killTweensOf([this.hook, this.fishingLine]);
+      this.scene.tweens.add({
+        targets: [this.hook, this.fishingLine],
+        x: '+=5',
+        duration: 100,
+        yoyo: true,
+        repeat: 10
+      });
+
+      // Short window to press (1.5 seconds)
+      this.hookTimer = this.scene.time.delayedCall(1500, () => {
+        if (this.state === 'hooking') {
+          this.fail('Too slow!');
+        }
+      });
+    }
+
+    startReelingPhase() {
+      this.state = 'reeling';
+      this.instructionText.setText('Keep the arrow in the green zone!');
+      this.instructionText.setFontSize('18px');
+      this.instructionText.setStyle({ fill: '#0F380F' });
+
+      // Select random fish
+      const rarityRoll = Math.random();
+      let fishPool;
+      if (rarityRoll < 0.5) {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Common');
+      } else if (rarityRoll < 0.8) {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Uncommon');
+      } else if (rarityRoll < 0.95) {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Rare');
+      } else {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Epic');
+      }
+      this.selectedFish = Phaser.Utils.Array.GetRandom(fishPool);
+
+      // Show arrow UI
+      this.arrowContainer.setVisible(true);
+      this.progressBar.setVisible(true);
+      this.hook.setVisible(false);
+      this.fishingLine.setVisible(false);
+
+      // Initialize positions
+      this.playerPosition = 0;
+      this.targetPosition = Phaser.Math.Between(-100, 100);
+      this.targetZone.setX(this.targetPosition);
+
+      // Update loop
+      this.reelingTime = 0;
+      this.reelingUpdate = this.scene.time.addEvent({
+        delay: 50,
+        callback: () => this.updateReeling(),
+        loop: true
+      });
+    }
+
+    updateReeling() {
+      this.reelingTime += 50;
+
+      // Move target zone randomly
+      if (Math.random() < 0.1) {
+        this.targetPosition = Phaser.Math.Between(-100, 100);
+        this.scene.tweens.add({
+          targets: this.targetZone,
+          x: this.targetPosition,
+          duration: 300,
+          ease: 'Sine.easeInOut'
+        });
+      }
+
+      // Check if player arrow is in target zone
+      const distance = Math.abs(this.playerPosition - this.targetPosition);
+      const inZone = distance < 40;
+
+      if (inZone) {
+        // Progress increases
+        const progress = (this.reelingTime / this.maxReelingTime) * 300;
+        this.progressBar.setSize(progress, 20);
+
+        if (this.reelingTime >= this.maxReelingTime) {
+          this.success();
+        }
+      } else {
+        // Progress decreases
+        this.reelingTime = Math.max(0, this.reelingTime - 100);
+        const progress = (this.reelingTime / this.maxReelingTime) * 300;
+        this.progressBar.setSize(progress, 20);
+      }
+    }
+
+    onSpacePress() {
+      if (this.state === 'hooking') {
+        this.startReelingPhase();
+      } else if (this.state === 'reeling') {
+        // Move player arrow left on press
+        this.playerPosition -= 30;
+        this.playerPosition = Phaser.Math.Clamp(this.playerPosition, -130, 130);
+        this.scene.tweens.add({
+          targets: this.playerArrow,
+          x: this.playerPosition,
+          duration: 100,
+          ease: 'Power2'
+        });
+      }
+    }
+
+    success() {
+      this.state = 'success';
+      this.reelingUpdate.destroy();
+
+      this.instructionText.setText(`🎉 You caught a ${this.selectedFish.name}! 🎉`);
+      this.instructionText.setFontSize('20px');
+      this.instructionText.setStyle({ fill: '#0F380F' });
+
+      this.arrowContainer.setVisible(false);
+      this.progressBar.setVisible(false);
+
+      // Show caught fish
+      this.resultFish.setTexture('fish', this.selectedFish.key);
+      this.resultFish.setVisible(true);
+
+      // Animate fish
+      this.resultFish.setScale(0);
+      this.scene.tweens.add({
+        targets: this.resultFish,
+        scale: 6,
+        duration: 500,
+        ease: 'Back.easeOut'
+      });
+
+      // Show rarity
+      const rarityText = this.scene.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80,
+        `[${this.selectedFish.rarity}]`, {
+        fontSize: '16px',
+        fill: '#0F380F',
+        fontStyle: 'italic'
+      }).setOrigin(0.5);
+      this.container.add(rarityText);
+
+      this.showCloseButton();
+    }
+
+    fail(reason) {
+      this.state = 'fail';
+      if (this.reelingUpdate) this.reelingUpdate.destroy();
+
+      this.instructionText.setText(`❌ ${reason}`);
+      this.instructionText.setStyle({ fill: '#FF0000' });
+
+      this.arrowContainer.setVisible(false);
+      this.progressBar.setVisible(false);
+      this.hook.setVisible(false);
+      this.fishingLine.setVisible(false);
+
+      this.showCloseButton();
+    }
+
+    showCloseButton() {
+      this.closeButton.setVisible(true);
+      this.closeButtonText.setVisible(true);
+
+      // Hover effect
+      this.closeButton.on('pointerover', () => {
+        this.closeButton.setFillStyle(0x8BAC0F);
+      });
+      this.closeButton.on('pointerout', () => {
+        this.closeButton.setFillStyle(0x0F380F);
+      });
+    }
+
+    close() {
+      const success = this.state === 'success';
+      const fish = success ? this.selectedFish : null;
+
+      // Cleanup
+      this.scene.input.keyboard.off('keydown-SPACE');
+      if (this.hookTimer) this.hookTimer.destroy();
+      if (this.reelingUpdate) this.reelingUpdate.destroy();
+      this.container.destroy();
+
+      // Callback
+      this.onComplete(success, fish);
+    }
+  }
+
+  // Player arrow drifts right naturally
+  setInterval(() => {
+    if (window.currentFishingGame && window.currentFishingGame.state === 'reeling') {
+      const game = window.currentFishingGame;
+      game.playerPosition += 2;
+      game.playerPosition = Phaser.Math.Clamp(game.playerPosition, -130, 130);
+      game.scene.tweens.add({
+        targets: game.playerArrow,
+        x: game.playerPosition,
+        duration: 50,
+        ease: 'Linear'
+      });
+    }
+  }, 50);
+
+  // Make fishing game globally accessible for drift mechanic
+  const originalCreate = FishingMinigame.prototype.create;
+  FishingMinigame.prototype.create = function() {
+    window.currentFishingGame = this;
+    originalCreate.call(this);
+  };
+
+  const originalClose = FishingMinigame.prototype.close;
+  FishingMinigame.prototype.close = function() {
+    window.currentFishingGame = null;
+    originalClose.call(this);
+  };
+
+  // ===== GAME INITIALIZATION =====
   new Phaser.Game({
-    type:Phaser.AUTO,
-    width:800,
-    height:600,
-    parent:'game-container',
-    backgroundColor:'#87CEEB',
-    scene:TropicalIslandScene,
-    scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-    render:{pixelArt:true,antialias:false,roundPixels:true}
+    type: Phaser.AUTO,
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
+    parent: 'game-container',
+    backgroundColor: COLORS.SKY,
+    scene: TropicalIslandScene,
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    render: { pixelArt: true, antialias: false, roundPixels: true }
   });
   </script>
 </body>
