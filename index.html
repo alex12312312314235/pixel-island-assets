@@ -29,41 +29,88 @@
   class TropicalIslandScene extends Phaser.Scene {
     constructor(){super('TropicalIslandScene');}
     preload(){
-      this.load.setBaseURL('https://alex12312312314235.github.io/pixel-island-assets/');
+      // Use relative paths - works locally AND on GitHub Pages
+      // this.load.setBaseURL('https://alex12312312314235.github.io/pixel-island-assets/');
 
       // --- sprite atlases ---
       this.load.atlas('terrain','terrain_flora.png','terrain_flora.json');
       this.load.atlas('fish','fish_characters.png','fish_characters.json');
 
-      // progress bar
+      // progress bar and loading feedback
       const bar=document.getElementById('loading-progress'),txt=document.getElementById('loading-text'),info=document.getElementById('status-info');
-      this.load.on('progress',v=>{bar.style.width=`${v*100}%`;txt.textContent=`🏝️ Loading... ${Math.round(v*100)}%`;});
-      this.load.on('fileload',(_,__,___,f)=>{info.textContent=`✅ Loaded: ${f.url.split('/').pop()}`;});
-      this.load.on('complete',()=>{info.textContent='🎉 All assets loaded!';setTimeout(()=>document.getElementById('loading-overlay').style.display='none',600);});
-      this.load.on('loaderror',f=>{txt.textContent='❌ Load error';info.textContent=`Failed: ${f.url.split('/').pop()}`;info.style.color='#ff6b6b';});
+      this.load.on('progress',v=>{
+        bar.style.width=`${v*100}%`;
+        txt.textContent=`🏝️ Loading... ${Math.round(v*100)}%`;
+        console.log(`Loading progress: ${Math.round(v*100)}%`);
+      });
+      this.load.on('fileload',(_,__,___,f)=>{
+        const filename=f.url.split('/').pop();
+        info.textContent=`✅ Loaded: ${filename}`;
+        console.log(`✅ Successfully loaded: ${filename}`);
+      });
+      this.load.on('complete',()=>{
+        info.textContent='🎉 All assets loaded!';
+        console.log('🎉 All assets loaded successfully!');
+        setTimeout(()=>document.getElementById('loading-overlay').style.display='none',600);
+      });
+      this.load.on('loaderror',f=>{
+        const filename=f.url.split('/').pop();
+        txt.textContent='❌ Load error';
+        info.textContent=`Failed: ${filename}`;
+        info.style.color='#ff6b6b';
+        console.error(`❌ Failed to load: ${filename}`);
+        console.error('Full URL:', f.url);
+        console.error('Check that the file exists in the same directory as index.html');
+      });
     }
     create(){
+      console.log('🎮 Creating game scene...');
+
       // sky-blue background
       this.add.rectangle(400,300,800,600,0x87CEEB);
 
-      // island
-      const sand=this.add.image(380,340,'terrain','sand_irregular').setScale(2.5);
-      const palm1=this.add.image(300,260,'terrain','palm_big').setScale(1.8).setOrigin(.5,1);
-      const palm2=this.add.image(500,280,'terrain','palm_small').setScale(2.0).setOrigin(.5,1);
-      const bush=this.add.image(420,320,'terrain','bush_medium').setScale(1.8);
+      try {
+        // Verify atlases are loaded
+        if(!this.textures.exists('terrain')){
+          console.error('❌ terrain atlas not loaded!');
+          this.add.text(400,300,'ERROR: terrain atlas failed to load',{fontSize:'24px',fill:'#ff0000'}).setOrigin(.5);
+          return;
+        }
+        if(!this.textures.exists('fish')){
+          console.error('❌ fish atlas not loaded!');
+          this.add.text(400,300,'ERROR: fish atlas failed to load',{fontSize:'24px',fill:'#ff0000'}).setOrigin(.5);
+          return;
+        }
+        console.log('✅ Both atlases loaded successfully');
 
-      // fish
-      const fish1=this.add.image(150,200,'fish','fish_blue').setScale(3.5),
-            fish2=this.add.image(650,450,'fish','fish_yellow').setScale(3.2);
+        // island
+        console.log('Creating island elements...');
+        const sand=this.add.image(380,340,'terrain','sand_irregular').setScale(2.5);
+        const palm1=this.add.image(300,260,'terrain','palm_big').setScale(1.8).setOrigin(.5,1);
+        const palm2=this.add.image(500,280,'terrain','palm_small').setScale(2.0).setOrigin(.5,1);
+        const bush=this.add.image(420,320,'terrain','bush_medium').setScale(1.8);
+        console.log('✅ Island elements created');
 
-      // simple tweens
-      this.tweens.add({targets:[palm1],rotation:.18,duration:4000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
-      this.tweens.add({targets:[palm2],rotation:-.15,duration:4500,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:1500});
-      this.tweens.add({targets:fish1,x:250,y:170,duration:7000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
-      this.tweens.add({targets:fish2,x:550,y:480,duration:8000,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:2000});
+        // fish
+        console.log('Creating fish...');
+        const fish1=this.add.image(150,200,'fish','fish_blue').setScale(3.5),
+              fish2=this.add.image(650,450,'fish','fish_yellow').setScale(3.2);
+        console.log('✅ Fish created');
 
-      // title
-      this.add.text(400,50,'🌴 TROPICAL ISLAND PARADISE 🌴',{fontSize:'32px',fontFamily:'Arial',fill:'#fff',stroke:'#2E86AB',strokeThickness:6}).setOrigin(.5);
+        // simple tweens
+        this.tweens.add({targets:[palm1],rotation:.18,duration:4000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+        this.tweens.add({targets:[palm2],rotation:-.15,duration:4500,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:1500});
+        this.tweens.add({targets:fish1,x:250,y:170,duration:7000,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+        this.tweens.add({targets:fish2,x:550,y:480,duration:8000,yoyo:true,repeat:-1,ease:'Sine.easeInOut',delay:2000});
+        console.log('✅ Animations created');
+
+        // title
+        this.add.text(400,50,'🌴 TROPICAL ISLAND PARADISE 🌴',{fontSize:'32px',fontFamily:'Arial',fill:'#fff',stroke:'#2E86AB',strokeThickness:6}).setOrigin(.5);
+        console.log('✅ Scene creation complete!');
+      } catch(error) {
+        console.error('❌ Error creating scene:', error);
+        this.add.text(400,300,'ERROR: '+error.message,{fontSize:'24px',fill:'#ff0000',wordWrap:{width:700}}).setOrigin(.5);
+      }
     }
   }
 
