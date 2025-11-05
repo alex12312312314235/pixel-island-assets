@@ -58,6 +58,7 @@
   // ===== GAME STATE MANAGER =====
   const GameState = {
     fishCollection: null,
+    learningProgress: null,
     debugMode: false,
     currentFishingGame: null, // Track active fishing game for drift mechanic
 
@@ -70,6 +71,8 @@
     init() {
       this.fishCollection = new FishCollection();
       this.fishCollection.load();
+      this.learningProgress = new LearningProgress();
+      this.learningProgress.load();
     },
 
     // Helper methods for state management
@@ -181,6 +184,104 @@
       FISH_TYPES.forEach(fish => {
         this.collection[fish.id] = {seen: false, caught: false, count: 0};
       });
+      this.save();
+    }
+  }
+
+  // ===== LEARNING PROGRESS TRACKER =====
+  class LearningProgress {
+    constructor() {
+      this.storageKey = 'maxisIsland.learning.v1';
+      this.data = {
+        countingGamesPlayed: 0,
+        crabQuestionsCorrect: 0,
+        crabQuestionsTotal: 0,
+        lettersFound: [],
+        letterPairsCleared: 0,
+        sequencesCompleted: 0
+      };
+    }
+
+    // Record counting game completion
+    recordCountingGame(correct) {
+      this.data.countingGamesPlayed++;
+      if (correct) {
+        // Could track correct answers if needed
+      }
+      this.save();
+    }
+
+    // Record crab race question
+    recordCrabQuestion(correct) {
+      this.data.crabQuestionsTotal++;
+      if (correct) {
+        this.data.crabQuestionsCorrect++;
+      }
+      this.save();
+    }
+
+    // Record letter found
+    recordLetterFound(letter) {
+      if (!this.data.lettersFound.includes(letter)) {
+        this.data.lettersFound.push(letter);
+      }
+      this.save();
+    }
+
+    // Record letter pair completion
+    recordLetterPairs() {
+      this.data.letterPairsCleared++;
+      this.save();
+    }
+
+    // Record sequence completion
+    recordSequence(correct) {
+      if (correct) {
+        this.data.sequencesCompleted++;
+      }
+      this.save();
+    }
+
+    // Get stats for NPC dialogue
+    getStats() {
+      return {
+        ...this.data,
+        uniqueLetters: this.data.lettersFound.length
+      };
+    }
+
+    // Save to localStorage
+    save() {
+      try {
+        localStorage.setItem(this.storageKey, JSON.stringify(this.data));
+      } catch (e) {
+        console.error('Failed to save learning progress:', e);
+      }
+    }
+
+    // Load from localStorage
+    load() {
+      try {
+        const saved = localStorage.getItem(this.storageKey);
+        if (saved) {
+          this.data = { ...this.data, ...JSON.parse(saved) };
+          console.log('✅ Learning progress loaded');
+        }
+      } catch (e) {
+        console.error('Failed to load learning progress, starting fresh:', e);
+      }
+    }
+
+    // Reset progress (for testing)
+    reset() {
+      this.data = {
+        countingGamesPlayed: 0,
+        crabQuestionsCorrect: 0,
+        crabQuestionsTotal: 0,
+        lettersFound: [],
+        letterPairsCleared: 0,
+        sequencesCompleted: 0
+      };
       this.save();
     }
   }
@@ -549,37 +650,59 @@
           onActivate: () => this.startFishing()
         },
         {
-          id: 'crab_area',
-          x: 650,
-          y: 450,
-          radius: 60,
-          prompt: '🦀 Space',
-          sprite: this.add.image(650, 450, 'fish', 'crab_blue')
-            .setScale(4)
-            .setDepth(8),
-          onActivate: () => this.showCrabPlaceholder()
-        },
-        {
-          id: 'tide_pool',
+          id: 'tide_pool_counting',
           x: 200,
           y: 200,
           radius: 60,
-          prompt: '🐚 Space',
+          prompt: '🐚 Count!',
           sprite: this.add.image(200, 200, 'terrain', 'rock_cluster')
             .setScale(2)
             .setDepth(8),
-          onActivate: () => this.showTidePoolPlaceholder()
+          onActivate: () => this.startTidePoolCounting()
         },
         {
-          id: 'sea_creature_spot',
+          id: 'crab_race',
+          x: 650,
+          y: 450,
+          radius: 60,
+          prompt: '🦀 Race!',
+          sprite: this.add.image(650, 450, 'fish', 'crab_blue')
+            .setScale(4)
+            .setDepth(8),
+          onActivate: () => this.startCrabRace()
+        },
+        {
+          id: 'letter_spotter',
           x: 650,
           y: 200,
           radius: 60,
-          prompt: '🐙 Space',
+          prompt: '🐙 Letters!',
           sprite: this.add.image(650, 200, 'fish', 'seahorse_green')
             .setScale(5)
             .setDepth(8),
-          onActivate: () => this.showSeaCreaturePlaceholder()
+          onActivate: () => this.startLetterSpotter()
+        },
+        {
+          id: 'letter_pairs',
+          x: 200,
+          y: 450,
+          radius: 60,
+          prompt: '🎴 Match!',
+          sprite: this.add.image(200, 450, 'terrain', 'rock_small_1')
+            .setScale(2.5)
+            .setDepth(8),
+          onActivate: () => this.startLetterPairs()
+        },
+        {
+          id: 'beach_cleanup',
+          x: 400,
+          y: 480,
+          radius: 60,
+          prompt: '🏖️ Clean!',
+          sprite: this.add.image(400, 480, 'terrain', 'branch_1')
+            .setScale(2)
+            .setDepth(8),
+          onActivate: () => this.startBeachCleanup()
         }
       ];
 
@@ -667,13 +790,22 @@
       container.add(dialogueBox);
 
       // Get dialogue based on progress
-      const stats = GameState.fishCollection.getStats();
-      let message = 'Welcome to the island, Maxi!\n\nTry fishing at the dock or explore the other spots!';
+      const fishStats = GameState.fishCollection.getStats();
+      const learnStats = GameState.learningProgress.getStats();
 
-      if (stats.caught >= 5) {
-        message = `Great job! You've caught ${stats.caught} different fish!\n\nKeep exploring to find them all!`;
-      } else if (stats.caught > 0) {
-        message = `You've caught ${stats.caught} fish so far.\n\nThere are many more to discover!`;
+      let message = 'Welcome to the island, Maxi!\n\nTry fishing or explore the learning spots!';
+
+      // Priority messages based on progress
+      if (learnStats.uniqueLetters >= 10) {
+        message = `Wow! You've found ${learnStats.uniqueLetters} different letters!\n\nYou're doing amazing!`;
+      } else if (learnStats.countingGamesPlayed >= 3) {
+        message = `You've practiced counting ${learnStats.countingGamesPlayed} times!\n\nKeep up the great work!`;
+      } else if (learnStats.crabQuestionsCorrect >= 5) {
+        message = `You got ${learnStats.crabQuestionsCorrect} math questions right!\n\nYou're so smart!`;
+      } else if (fishStats.caught >= 5) {
+        message = `Great job! You've caught ${fishStats.caught} different fish!\n\nTry the learning games too!`;
+      } else if (fishStats.caught > 0 || learnStats.countingGamesPlayed > 0) {
+        message = `You're doing great!\n\nThere's so much to explore and learn!`;
       }
 
       const dialogueText = this.add.text(centerX, centerY + 140, message, {
@@ -734,108 +866,51 @@
       }
     }
 
-    // ===== PLACEHOLDER MINI-GAMES =====
+    // ===== EDUCATIONAL MINI-GAME LAUNCHERS (PHASE 3) =====
 
-    showCrabPlaceholder() {
+    startTidePoolCounting() {
       if (GameState.isMinigameActive) return;
 
       GameState.startMinigame();
-      this.showPlaceholderPanel(
-        '🦀 CRAB DASH',
-        'Coming soon!\n\nRace the crab to the finish line\nby hammering the Space key!'
-      );
-    }
-
-    showTidePoolPlaceholder() {
-      if (GameState.isMinigameActive) return;
-
-      GameState.startMinigame();
-      this.showPlaceholderPanel(
-        '🐚 TIDE POOL MATCH',
-        'Coming soon!\n\nFlip cards and find all the\nmatching sea creature pairs!'
-      );
-    }
-
-    showSeaCreaturePlaceholder() {
-      if (GameState.isMinigameActive) return;
-
-      GameState.startMinigame();
-      this.showPlaceholderPanel(
-        '🐙 SEA CREATURE SPOTTER',
-        'Coming soon!\n\nSpot creatures as they swim through\nthe target zone. Press Space to catch them!'
-      );
-    }
-
-    showPlaceholderPanel(title, description) {
-      const centerX = GAME_WIDTH / 2;
-      const centerY = GAME_HEIGHT / 2;
-
-      const container = this.add.container(0, 0).setDepth(150);
-
-      // Overlay
-      const overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
-        .setOrigin(0)
-        .setInteractive();
-      container.add(overlay);
-
-      // Panel
-      const panelWidth = 500;
-      const panelHeight = 300;
-
-      const outerBorder = this.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
-        .setStrokeStyle(4, COLORS.BLACK);
-      container.add(outerBorder);
-
-      const panel = this.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
-        .setStrokeStyle(4, 0x0F380F);
-      container.add(panel);
-
-      // Title
-      const titleText = this.add.text(centerX, centerY - 100, title, {
-        fontSize: '28px',
-        fontFamily: 'Arial',
-        fill: '#0F380F',
-        fontStyle: 'bold'
-      }).setOrigin(0.5);
-      container.add(titleText);
-
-      // Description
-      const descText = this.add.text(centerX, centerY, description, {
-        fontSize: '18px',
-        fontFamily: 'Arial',
-        fill: '#0F380F',
-        align: 'center',
-        lineSpacing: 5
-      }).setOrigin(0.5);
-      container.add(descText);
-
-      // Close button
-      const closeBtn = this.add.rectangle(centerX, centerY + 110, 200, 40, 0x0F380F)
-        .setInteractive({ useHandCursor: true });
-      container.add(closeBtn);
-
-      const closeBtnText = this.add.text(centerX, centerY + 110, 'BACK (Space)', {
-        fontSize: '18px',
-        fontFamily: 'Arial',
-        fill: '#9BBC0F',
-        fontStyle: 'bold'
-      }).setOrigin(0.5);
-      container.add(closeBtnText);
-
-      // Hover effect
-      closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x8BAC0F));
-      closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x0F380F));
-
-      // Close handlers
-      const closePlaceholder = () => {
-        this.input.keyboard.off('keydown-SPACE', closePlaceholder);
-        closeBtn.off('pointerdown');
-        container.destroy();
+      new TidePoolCountingGame(this, () => {
         GameState.enableOverworld();
-      };
+      });
+    }
 
-      closeBtn.on('pointerdown', closePlaceholder);
-      this.input.keyboard.once('keydown-SPACE', closePlaceholder);
+    startCrabRace() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new CrabNumberRaceGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    startLetterSpotter() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new LetterSpotterGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    startLetterPairs() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new LetterPairsMatchGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    startBeachCleanup() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new BeachCleanupGame(this, () => {
+        GameState.enableOverworld();
+      });
     }
 
     showNewFishPopup(fish) {
@@ -1151,6 +1226,1020 @@
         }).setOrigin(0.5, 0);
         container.add(label);
       });
+    }
+  }
+
+  // ===== EDUCATIONAL MINI-GAMES (PHASE 3) =====
+
+  // ===== 1. TIDE POOL COUNTING GAME =====
+  class TidePoolCountingGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.targetColor = null;
+      this.targetCount = 0;
+      this.selectedAnswer = -1;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 600;
+      const panelHeight = 450;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 200, '🐚 TIDE POOL COUNTING', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Choose random target
+      const fishColors = [
+        {key: 'fish_red', name: 'red'},
+        {key: 'fish_blue', name: 'blue'},
+        {key: 'fish_yellow', name: 'yellow'},
+        {key: 'fish_green', name: 'green'}
+      ];
+      this.targetColor = Phaser.Utils.Array.GetRandom(fishColors);
+      this.targetCount = Phaser.Math.Between(3, 8);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 160,
+        `Count the ${this.targetColor.name} fish!`, {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Spawn fish
+      this.spawnFish();
+
+      // Wait 3 seconds, then show answer choices
+      this.scene.time.delayedCall(3000, () => this.showChoices());
+    }
+
+    spawnFish() {
+      const fishArea = {
+        x: GAME_WIDTH / 2 - 250,
+        y: GAME_HEIGHT / 2 - 80,
+        width: 500,
+        height: 120
+      };
+
+      // Spawn target fish
+      for (let i = 0; i < this.targetCount; i++) {
+        const x = fishArea.x + Math.random() * fishArea.width;
+        const y = fishArea.y + Math.random() * fishArea.height;
+        const fish = this.scene.add.image(x, y, 'fish', this.targetColor.key).setScale(3);
+        this.container.add(fish);
+      }
+
+      // Spawn 2-4 distractor fish
+      const distractorCount = Phaser.Math.Between(2, 4);
+      const otherColors = ['fish_orange', 'fish_purple', 'fish_gray'];
+
+      for (let i = 0; i < distractorCount; i++) {
+        const x = fishArea.x + Math.random() * fishArea.width;
+        const y = fishArea.y + Math.random() * fishArea.height;
+        const colorKey = Phaser.Utils.Array.GetRandom(otherColors);
+        const fish = this.scene.add.image(x, y, 'fish', colorKey).setScale(3);
+        this.container.add(fish);
+      }
+    }
+
+    showChoices() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Generate 3 answer choices (one correct, two wrong)
+      const answers = [this.targetCount];
+      while (answers.length < 3) {
+        const wrong = this.targetCount + Phaser.Math.Between(-3, 3);
+        if (wrong > 0 && wrong !== this.targetCount && !answers.includes(wrong)) {
+          answers.push(wrong);
+        }
+      }
+      Phaser.Utils.Array.Shuffle(answers);
+
+      const questionText = this.scene.add.text(centerX, centerY + 60,
+        'How many?', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(questionText);
+
+      // Create answer buttons
+      const startX = centerX - 150;
+      const y = centerY + 110;
+
+      answers.forEach((num, idx) => {
+        const x = startX + idx * 150;
+
+        // Shell background
+        const button = this.scene.add.rectangle(x, y, 80, 80, 0x8BAC0F)
+          .setStrokeStyle(3, 0x0F380F)
+          .setInteractive({ useHandCursor: true });
+        this.container.add(button);
+
+        const text = this.scene.add.text(x, y, num.toString(), {
+          fontSize: '36px',
+          fontFamily: 'Arial',
+          fill: '#0F380F',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(text);
+
+        button.on('pointerover', () => button.setFillStyle(0xFFFFFF, 0.3));
+        button.on('pointerout', () => button.setFillStyle(0x8BAC0F));
+        button.on('pointerdown', () => this.selectAnswer(num, num === this.targetCount));
+      });
+    }
+
+    selectAnswer(selected, isCorrect) {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Record progress
+      GameState.learningProgress.recordCountingGame(isCorrect);
+
+      const feedbackText = this.scene.add.text(centerX, centerY + 170,
+        isCorrect ?
+          `✅ Great job! There are ${this.targetCount} ${this.targetColor.name} fish!` :
+          `Try again next time! There were ${this.targetCount} ${this.targetColor.name} fish.`, {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: isCorrect ? '#0F380F' : '#8B4513',
+        fontStyle: 'bold',
+        align: 'center'
+      }).setOrigin(0.5);
+      this.container.add(feedbackText);
+
+      this.scene.time.delayedCall(2500, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 2. CRAB NUMBER RACE GAME =====
+  class CrabNumberRaceGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.crabSprite = null;
+      this.currentQuestion = 0;
+      this.totalQuestions = 4;
+      this.correctCount = 0;
+      this.crabPosition = 0;
+
+      // Question bank
+      this.questions = this.generateQuestions();
+
+      this.create();
+    }
+
+    generateQuestions() {
+      const questions = [];
+
+      for (let i = 0; i < this.totalQuestions; i++) {
+        if (Math.random() < 0.5) {
+          // Comparison question
+          const num1 = Phaser.Math.Between(1, 15);
+          const num2 = Phaser.Math.Between(1, 15);
+          questions.push({
+            type: 'compare',
+            text: `Which is bigger: ${num1} or ${num2}?`,
+            correct: Math.max(num1, num2),
+            choices: [num1, num2, Math.min(num1, num2) - 1].filter(n => n > 0)
+          });
+        } else {
+          // Addition question
+          const num1 = Phaser.Math.Between(1, 5);
+          const num2 = Phaser.Math.Between(1, 5);
+          const sum = num1 + num2;
+          questions.push({
+            type: 'addition',
+            text: `${num1} + ${num2} = ?`,
+            correct: sum,
+            choices: [sum, sum + 1, sum - 1].filter(n => n > 0)
+          });
+        }
+      }
+
+      return questions;
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 600;
+      const panelHeight = 400;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 170, '🦀 CRAB NUMBER RACE', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Race track
+      const trackWidth = 400;
+      const track = this.scene.add.rectangle(centerX, centerY - 100, trackWidth, 40, 0x8BAC0F)
+        .setStrokeStyle(3, 0x0F380F);
+      this.container.add(track);
+
+      // Start and finish markers
+      const startText = this.scene.add.text(centerX - 195, centerY - 100, 'START', {
+        fontSize: '12px',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(startText);
+
+      const finishText = this.scene.add.text(centerX + 195, centerY - 100, '🏁', {
+        fontSize: '16px'
+      }).setOrigin(0.5);
+      this.container.add(finishText);
+
+      // Crab sprite
+      this.crabSprite = this.scene.add.image(centerX - 180, centerY - 100, 'fish', 'crab_blue')
+        .setScale(3);
+      this.container.add(this.crabSprite);
+
+      // Show first question
+      this.showQuestion();
+    }
+
+    showQuestion() {
+      if (this.currentQuestion >= this.totalQuestions) {
+        this.showWin();
+        return;
+      }
+
+      const question = this.questions[this.currentQuestion];
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Question text
+      const questionText = this.scene.add.text(centerX, centerY - 30, question.text, {
+        fontSize: '22px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(questionText);
+
+      // Answer choices
+      const startX = centerX - 120;
+      const y = centerY + 40;
+
+      Phaser.Utils.Array.Shuffle(question.choices);
+
+      question.choices.forEach((num, idx) => {
+        const x = startX + idx * 120;
+
+        const button = this.scene.add.rectangle(x, y, 80, 80, 0x8BAC0F)
+          .setStrokeStyle(3, 0x0F380F)
+          .setInteractive({ useHandCursor: true });
+        this.container.add(button);
+
+        const text = this.scene.add.text(x, y, num.toString(), {
+          fontSize: '32px',
+          fontFamily: 'Arial',
+          fill: '#0F380F',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(text);
+
+        button.on('pointerover', () => button.setFillStyle(0xFFFFFF, 0.3));
+        button.on('pointerout', () => button.setFillStyle(0x8BAC0F));
+        button.on('pointerdown', () => {
+          this.answerQuestion(num === question.correct, button);
+        });
+      });
+    }
+
+    answerQuestion(isCorrect, button) {
+      // Record progress
+      GameState.learningProgress.recordCrabQuestion(isCorrect);
+
+      if (isCorrect) {
+        this.correctCount++;
+        // Move crab forward
+        this.crabPosition += 90;
+        this.scene.tweens.add({
+          targets: this.crabSprite,
+          x: this.crabSprite.x + 90,
+          duration: 500,
+          ease: 'Power2'
+        });
+      } else {
+        // Shake crab
+        this.scene.tweens.add({
+          targets: this.crabSprite,
+          x: this.crabSprite.x + 5,
+          duration: 50,
+          yoyo: true,
+          repeat: 3
+        });
+      }
+
+      // Clear current question UI
+      this.scene.time.delayedCall(800, () => {
+        this.currentQuestion++;
+        // Clear old question elements (they'll be replaced)
+        this.showQuestion();
+      });
+    }
+
+    showWin() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const winText = this.scene.add.text(centerX, centerY + 100,
+        `🎉 You won! You got ${this.correctCount} out of ${this.totalQuestions} correct!`, {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold',
+        align: 'center'
+      }).setOrigin(0.5);
+      this.container.add(winText);
+
+      this.scene.time.delayedCall(3000, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 3. LETTER SPOTTER GAME =====
+  class LetterSpotterGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.targetLetter = null;
+      this.successCount = 0;
+      this.targetZone = null;
+      this.creatures = [];
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 650;
+      const panelHeight = 450;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Pick random target letter
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      this.targetLetter = Phaser.Utils.Array.GetRandom(letters);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 200, `🐙 Catch the letter ${this.targetLetter}!`, {
+        fontSize: '28px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 160,
+        'Press SPACE when the letter is in the green zone!', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Target zone
+      this.targetZone = this.scene.add.rectangle(centerX, centerY - 50, 150, 180, COLORS.GREEN, 0.3)
+        .setStrokeStyle(4, COLORS.GREEN);
+      this.container.add(this.targetZone);
+
+      // Status text
+      this.statusText = this.scene.add.text(centerX, centerY + 150, `Found: ${this.successCount} / 3`, {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(this.statusText);
+
+      // Spawn creatures
+      this.spawnCreatures();
+
+      // Handle space key
+      this.spaceKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      this.spaceKey.on('down', () => this.checkZone());
+    }
+
+    spawnCreatures() {
+      const creatureTypes = ['seahorse_green', 'seahorse_yellow', 'octopus_orange', 'octopus_pink', 'fish_mini1', 'fish_mini2'];
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+      for (let i = 0; i < 8; i++) {
+        const delay = i * 2000;
+
+        this.scene.time.delayedCall(delay, () => {
+          const y = GAME_HEIGHT / 2 - 50 + Phaser.Math.Between(-60, 60);
+          const creatureType = Phaser.Utils.Array.GetRandom(creatureTypes);
+
+          // Random letter (higher chance for target)
+          const letter = Math.random() < 0.35 ? this.targetLetter : Phaser.Utils.Array.GetRandom(letters);
+
+          this.spawnCreature(y, creatureType, letter);
+        });
+      }
+
+      // Auto-close after all creatures pass
+      this.scene.time.delayedCall(18000, () => this.close());
+    }
+
+    spawnCreature(y, creatureType, letter) {
+      const creature = this.scene.add.image(-50, y, 'fish', creatureType).setScale(4);
+      this.container.add(creature);
+
+      const letterText = this.scene.add.text(-50, y - 40, letter, {
+        fontSize: '32px',
+        fontFamily: 'Arial',
+        fill: '#FFFFFF',
+        stroke: '#000000',
+        strokeThickness: 4,
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(letterText);
+
+      const creatureData = { creature, letterText, letter, active: true };
+      this.creatures.push(creatureData);
+
+      // Animate across screen
+      this.scene.tweens.add({
+        targets: [creature, letterText],
+        x: GAME_WIDTH + 50,
+        duration: 6000,
+        ease: 'Linear',
+        onComplete: () => {
+          creatureData.active = false;
+        }
+      });
+    }
+
+    checkZone() {
+      const zoneLeft = this.targetZone.x - this.targetZone.width / 2;
+      const zoneRight = this.targetZone.x + this.targetZone.width / 2;
+
+      for (const creatureData of this.creatures) {
+        if (!creatureData.active) continue;
+
+        const creatureX = creatureData.creature.x;
+        if (creatureX >= zoneLeft && creatureX <= zoneRight) {
+          if (creatureData.letter === this.targetLetter) {
+            // Success!
+            this.successCount++;
+            this.statusText.setText(`Found: ${this.successCount} / 3`);
+
+            // Record progress
+            GameState.learningProgress.recordLetterFound(this.targetLetter);
+
+            // Flash effect
+            this.scene.tweens.add({
+              targets: [creatureData.creature, creatureData.letterText],
+              alpha: 0,
+              scale: 6,
+              duration: 300
+            });
+
+            creatureData.active = false;
+
+            if (this.successCount >= 3) {
+              this.scene.time.delayedCall(1000, () => this.showSuccess());
+            }
+          } else {
+            // Wrong letter - gentle feedback
+            this.scene.tweens.add({
+              targets: this.targetZone,
+              fillAlpha: 0.6,
+              duration: 100,
+              yoyo: true
+            });
+          }
+          break;
+        }
+      }
+    }
+
+    showSuccess() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const successText = this.scene.add.text(centerX, centerY + 180,
+        `🎉 You found all the ${this.targetLetter}'s!`, {
+        fontSize: '22px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(successText);
+
+      this.scene.time.delayedCall(2000, () => this.close());
+    }
+
+    close() {
+      if (this.spaceKey) {
+        this.spaceKey.off('down');
+      }
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 4. LETTER PAIRS MATCH GAME =====
+  class LetterPairsMatchGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.cards = [];
+      this.flippedCards = [];
+      this.matchedPairs = 0;
+      this.totalPairs = 6;
+      this.canFlip = true;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 650;
+      const panelHeight = 500;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 220, '🎴 LETTER PAIRS MATCH', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 185,
+        'Match uppercase and lowercase letters!', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Generate pairs
+      this.generateCards();
+    }
+
+    generateCards() {
+      // Pick 6 random letters
+      const allLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      const selectedLetters = [];
+
+      for (let i = 0; i < this.totalPairs; i++) {
+        const letter = Phaser.Utils.Array.GetRandom(allLetters);
+        selectedLetters.push({ upper: letter, lower: letter.toLowerCase() });
+        allLetters.splice(allLetters.indexOf(letter), 1);
+      }
+
+      // Create card data
+      const cardData = [];
+      selectedLetters.forEach(pair => {
+        cardData.push({ letter: pair.upper, pairId: pair.upper });
+        cardData.push({ letter: pair.lower, pairId: pair.upper });
+      });
+
+      // Shuffle
+      Phaser.Utils.Array.Shuffle(cardData);
+
+      // Create card grid (3 x 4)
+      const cols = 4;
+      const rows = 3;
+      const cardWidth = 90;
+      const cardHeight = 110;
+      const startX = GAME_WIDTH / 2 - (cols * cardWidth) / 2 + cardWidth / 2;
+      const startY = GAME_HEIGHT / 2 - (rows * cardHeight) / 2 + cardHeight / 2 + 20;
+
+      cardData.forEach((data, idx) => {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const x = startX + col * cardWidth;
+        const y = startY + row * cardHeight;
+
+        this.createCard(x, y, data);
+      });
+    }
+
+    createCard(x, y, data) {
+      // Card back (face-down)
+      const cardBack = this.scene.add.rectangle(x, y, 75, 95, 0x4682B4)
+        .setStrokeStyle(3, 0x0F380F)
+        .setInteractive({ useHandCursor: true });
+
+      // Card front (face-up) - hidden initially
+      const cardFront = this.scene.add.rectangle(x, y, 75, 95, 0xFFFFFF)
+        .setStrokeStyle(3, 0x0F380F)
+        .setVisible(false);
+
+      const letterText = this.scene.add.text(x, y, data.letter, {
+        fontSize: '48px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5).setVisible(false);
+
+      this.container.add(cardBack);
+      this.container.add(cardFront);
+      this.container.add(letterText);
+
+      const card = {
+        data,
+        cardBack,
+        cardFront,
+        letterText,
+        isFlipped: false,
+        isMatched: false
+      };
+
+      this.cards.push(card);
+
+      cardBack.on('pointerdown', () => this.flipCard(card));
+    }
+
+    flipCard(card) {
+      if (!this.canFlip || card.isFlipped || card.isMatched || this.flippedCards.length >= 2) return;
+
+      // Flip animation
+      card.isFlipped = true;
+      card.cardBack.setVisible(false);
+      card.cardFront.setVisible(true);
+      card.letterText.setVisible(true);
+
+      this.flippedCards.push(card);
+
+      if (this.flippedCards.length === 2) {
+        this.canFlip = false;
+        this.scene.time.delayedCall(800, () => this.checkMatch());
+      }
+    }
+
+    checkMatch() {
+      const [card1, card2] = this.flippedCards;
+
+      if (card1.data.pairId === card2.data.pairId) {
+        // Match!
+        card1.isMatched = true;
+        card2.isMatched = true;
+
+        // Highlight matched cards
+        card1.cardFront.setFillStyle(0x90EE90);
+        card2.cardFront.setFillStyle(0x90EE90);
+
+        this.matchedPairs++;
+
+        if (this.matchedPairs === this.totalPairs) {
+          // Record progress
+          GameState.learningProgress.recordLetterPairs();
+          this.scene.time.delayedCall(1000, () => this.showSuccess());
+        }
+      } else {
+        // No match - flip back
+        card1.isFlipped = false;
+        card2.isFlipped = false;
+        card1.cardBack.setVisible(true);
+        card2.cardBack.setVisible(false);
+        card1.cardFront.setVisible(false);
+        card2.cardFront.setVisible(false);
+        card1.letterText.setVisible(false);
+        card2.letterText.setVisible(false);
+      }
+
+      this.flippedCards = [];
+      this.canFlip = true;
+    }
+
+    showSuccess() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const successText = this.scene.add.text(centerX, centerY + 220,
+        '🎉 All matched!', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(successText);
+
+      this.scene.time.delayedCall(2000, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 5. BEACH CLEANUP (NUMBER SEQUENCES) GAME =====
+  class BeachCleanupGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.currentRound = 0;
+      this.totalRounds = 3;
+      this.correctCount = 0;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 600;
+      const panelHeight = 450;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 190, '🏖️ BEACH CLEAN-UP', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 155,
+        'Fill in the missing number!', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Start first round
+      this.showRound();
+    }
+
+    showRound() {
+      if (this.currentRound >= this.totalRounds) {
+        this.showComplete();
+        return;
+      }
+
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Generate sequence
+      const step = Math.random() < 0.7 ? 1 : 2;
+      const start = Phaser.Math.Between(5, 25);
+      const sequence = [start, start + step, start + step * 2];
+
+      // Pick which position is missing (0, 1, or 2)
+      const missingIdx = Phaser.Math.Between(0, 2);
+      const correctAnswer = sequence[missingIdx];
+      sequence[missingIdx] = '?';
+
+      // Display sequence
+      const sequenceText = this.scene.add.text(centerX, centerY - 80,
+        sequence.join('   '), {
+        fontSize: '48px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold',
+        letterSpacing: 10
+      }).setOrigin(0.5);
+      this.container.add(sequenceText);
+
+      // Generate answer choices
+      const wrongAnswers = [correctAnswer + step, correctAnswer - step, correctAnswer + 1]
+        .filter(n => n > 0 && n !== correctAnswer);
+      const choices = [correctAnswer, ...wrongAnswers.slice(0, 2)];
+      Phaser.Utils.Array.Shuffle(choices);
+
+      // Display choice buttons
+      const startX = centerX - 150;
+      const y = centerY + 40;
+
+      choices.forEach((num, idx) => {
+        const x = startX + idx * 150;
+
+        // Driftwood/branch board
+        const button = this.scene.add.rectangle(x, y, 100, 80, 0x8B4513)
+          .setStrokeStyle(3, 0x654321)
+          .setInteractive({ useHandCursor: true });
+        this.container.add(button);
+
+        const text = this.scene.add.text(x, y, num.toString(), {
+          fontSize: '36px',
+          fontFamily: 'Arial',
+          fill: '#F5DEB3',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(text);
+
+        button.on('pointerover', () => button.setFillStyle(0xA0522D));
+        button.on('pointerout', () => button.setFillStyle(0x8B4513));
+        button.on('pointerdown', () => {
+          this.selectAnswer(num, correctAnswer, num === correctAnswer, sequenceText, button);
+        });
+      });
+    }
+
+    selectAnswer(selected, correct, isCorrect, sequenceText, button) {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      if (isCorrect) {
+        this.correctCount++;
+
+        // Update sequence to show correct answer
+        sequenceText.setText(sequenceText.text.replace('?', correct.toString()));
+        sequenceText.setFill('#228B22');
+
+        // Animate button sliding into place
+        this.scene.tweens.add({
+          targets: button,
+          y: centerY - 80,
+          duration: 500,
+          ease: 'Power2'
+        });
+
+        const feedback = this.scene.add.text(centerX, centerY + 140,
+          `✅ Perfect! ${correct} goes there!`, {
+          fontSize: '20px',
+          fontFamily: 'Arial',
+          fill: '#0F380F',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(feedback);
+
+        // Record progress
+        GameState.learningProgress.recordSequence(true);
+
+        this.scene.time.delayedCall(2000, () => {
+          this.currentRound++;
+          // Clear round elements
+          this.showRound();
+        });
+      } else {
+        // Wrong answer - shake
+        this.scene.tweens.add({
+          targets: button,
+          x: button.x + 5,
+          duration: 50,
+          yoyo: true,
+          repeat: 3
+        });
+
+        const feedback = this.scene.add.text(centerX, centerY + 140,
+          `Try again! The answer is ${correct}`, {
+          fontSize: '18px',
+          fontFamily: 'Arial',
+          fill: '#8B4513'
+        }).setOrigin(0.5);
+        this.container.add(feedback);
+
+        // Record progress
+        GameState.learningProgress.recordSequence(false);
+
+        this.scene.time.delayedCall(2500, () => {
+          this.currentRound++;
+          this.showRound();
+        });
+      }
+    }
+
+    showComplete() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const completeText = this.scene.add.text(centerX, centerY,
+        `🎉 Beach cleaned!\nYou got ${this.correctCount} out of ${this.totalRounds} correct!`, {
+        fontSize: '22px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold',
+        align: 'center'
+      }).setOrigin(0.5);
+      this.container.add(completeText);
+
+      this.scene.time.delayedCall(3000, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
     }
   }
 
