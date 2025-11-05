@@ -61,9 +61,36 @@
     debugMode: false,
     currentFishingGame: null, // Track active fishing game for drift mechanic
 
+    // Phase 2: Overworld state
+    overworldInputEnabled: true,
+    isMinigameActive: false,
+    isDialogueOpen: false,
+    player: null,
+
     init() {
       this.fishCollection = new FishCollection();
       this.fishCollection.load();
+    },
+
+    // Helper methods for state management
+    disableOverworld() {
+      this.overworldInputEnabled = false;
+    },
+
+    enableOverworld() {
+      this.overworldInputEnabled = true;
+      this.isMinigameActive = false;
+      this.isDialogueOpen = false;
+    },
+
+    startMinigame() {
+      this.isMinigameActive = true;
+      this.disableOverworld();
+    },
+
+    openDialogue() {
+      this.isDialogueOpen = true;
+      this.disableOverworld();
     }
   };
 
@@ -158,6 +185,76 @@
     }
   }
 
+  // ===== PLAYER CLASS =====
+  class Player {
+    constructor(scene, x, y) {
+      this.scene = scene;
+      this.sprite = scene.add.image(x, y, 'fish', 'char_child').setDepth(10);
+      this.x = x;
+      this.y = y;
+      this.speed = 2.5; // Child-friendly speed
+      this.hitboxWidth = 24;
+      this.hitboxHeight = 36;
+    }
+
+    update(cursors, blockedZones) {
+      if (!GameState.overworldInputEnabled) return;
+
+      let newX = this.x;
+      let newY = this.y;
+
+      // Calculate intended movement
+      if (cursors.left.isDown) {
+        newX -= this.speed;
+        this.sprite.setFlipX(true); // Face left
+      } else if (cursors.right.isDown) {
+        newX += this.speed;
+        this.sprite.setFlipX(false); // Face right
+      }
+
+      if (cursors.up.isDown) {
+        newY -= this.speed;
+      } else if (cursors.down.isDown) {
+        newY += this.speed;
+      }
+
+      // Check collision with blocked zones
+      if (!this.wouldCollide(newX, newY, blockedZones)) {
+        this.x = newX;
+        this.y = newY;
+        this.sprite.setPosition(this.x, this.y);
+      }
+    }
+
+    wouldCollide(newX, newY, blockedZones) {
+      const hitbox = {
+        x: newX - this.hitboxWidth / 2,
+        y: newY - this.hitboxHeight / 2,
+        width: this.hitboxWidth,
+        height: this.hitboxHeight
+      };
+
+      for (const zone of blockedZones) {
+        if (this.rectanglesOverlap(hitbox, zone)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    rectanglesOverlap(rect1, rect2) {
+      return rect1.x < rect2.x + rect2.width &&
+             rect1.x + rect1.width > rect2.x &&
+             rect1.y < rect2.y + rect2.height &&
+             rect1.y + rect1.height > rect2.y;
+    }
+
+    getPosition() {
+      return { x: this.x, y: this.y };
+    }
+  }
+
   // ===== MAIN GAME SCENE =====
   class TropicalIslandScene extends Phaser.Scene {
     constructor() {
@@ -165,6 +262,16 @@
       this.fishingMinigame = null;
       this.collectionPanel = null;
       this.debugPanel = null;
+
+      // Phase 2: Overworld elements
+      this.player = null;
+      this.npc = null;
+      this.cursors = null;
+      this.blockedZones = [];
+      this.interactableSpots = [];
+      this.currentInteractable = null;
+      this.interactionPrompt = null;
+      this.dialoguePanel = null;
     }
 
     preload() {
@@ -232,28 +339,51 @@
       // Create swimming fish
       this.createSwimmingFish();
 
-      // Create fishing spot
-      this.createFishingSpot();
+      // Phase 2: Setup blocked zones (collision)
+      this.setupBlockedZones();
+
+      // Phase 2: Create player character
+      this.player = new Player(this, 400, 300); // Start in center
+      GameState.player = this.player;
+
+      // Phase 2: Create NPC guide
+      this.createNPC();
+
+      // Phase 2: Setup interactable spots
+      this.setupInteractableSpots();
+
+      // Phase 2: Create interaction prompt
+      this.interactionPrompt = this.add.text(0, 0, '', {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        fill: '#fff',
+        stroke: '#000',
+        strokeThickness: 4,
+        backgroundColor: '#2E86AB',
+        padding: { x: 10, y: 5 }
+      }).setOrigin(0.5).setDepth(100).setVisible(false);
 
       // Title
-      this.add.text(GAME_WIDTH / 2, 50, '🌴 MAXI\'S ISLAND FISHING 🌴', {
-        fontSize: '32px',
+      this.add.text(GAME_WIDTH / 2, 30, '🌴 MAXI\'S ISLAND FISHING 🌴', {
+        fontSize: '28px',
         fontFamily: 'Arial',
         fill: '#fff',
         stroke: '#2E86AB',
         strokeThickness: 6
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setDepth(5);
 
       // Instructions
-      const instructions = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 30,
-        'Click fishing spot to fish | Press C for Collection | Press D for Debug', {
-        fontSize: '14px',
+      const instructions = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 20,
+        'Arrow Keys: Move | Space: Interact | C: Collection | D: Debug', {
+        fontSize: '12px',
         fill: '#fff',
         stroke: '#2E86AB',
         strokeThickness: 3
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setDepth(5);
 
-      // Keyboard shortcuts
+      // Phase 2: Setup keyboard input
+      this.cursors = this.input.keyboard.createCursorKeys();
+      this.input.keyboard.on('keydown-SPACE', () => this.handleSpacePress());
       this.input.keyboard.on('keydown-C', () => this.toggleCollectionPanel());
       this.input.keyboard.on('keydown-D', () => this.toggleDebugPanel());
 
@@ -351,66 +481,233 @@
       console.log('✅ Swimming fish created');
     }
 
-    createFishingSpot() {
-      // Fishing spot indicator
-      const fishingX = 100;
-      const fishingY = 380;
+    // ===== PHASE 2: OVERWORLD METHODS =====
 
-      // Visual indicator - log/dock
-      const dock = this.add.image(fishingX, fishingY, 'terrain', 'log_large')
-        .setScale(1.5)
-        .setAlpha(0.9);
+    update() {
+      // Player movement
+      if (this.player && this.cursors) {
+        this.player.update(this.cursors, this.blockedZones);
+      }
 
-      // Interactive area
-      const clickArea = this.add.circle(fishingX, fishingY, 50, COLORS.BLUE, 0.3)
-        .setInteractive({ useHandCursor: true })
-        .setStrokeStyle(3, COLORS.WHITE);
-
-      // Hover effect
-      clickArea.on('pointerover', () => {
-        clickArea.setFillStyle(COLORS.BLUE, 0.5);
-        this.tweens.add({
-          targets: clickArea,
-          scale: 1.1,
-          duration: 200
-        });
-      });
-
-      clickArea.on('pointerout', () => {
-        clickArea.setFillStyle(COLORS.BLUE, 0.3);
-        this.tweens.add({
-          targets: clickArea,
-          scale: 1.0,
-          duration: 200
-        });
-      });
-
-      // Start fishing on click
-      clickArea.on('pointerdown', () => {
-        this.startFishing();
-      });
-
-      // Floating prompt
-      const prompt = this.add.text(fishingX, fishingY - 60, '🎣', {
-        fontSize: '32px'
-      }).setOrigin(0.5);
-
-      // Animate prompt
-      this.tweens.add({
-        targets: prompt,
-        y: fishingY - 70,
-        duration: 1000,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut'
-      });
-
-      console.log('✅ Fishing spot created');
+      // Check for nearby interactables
+      this.checkInteractions();
     }
 
-    startFishing() {
-      if (this.fishingMinigame) return; // Already fishing
+    setupBlockedZones() {
+      // Define collision zones for palms, rocks, water edges
+      this.blockedZones = [
+        // Palms
+        { x: 280, y: 220, width: 40, height: 80 }, // Left palm
+        { x: 480, y: 240, width: 40, height: 80 }, // Right palm
 
+        // Water edges (prevent walking into ocean)
+        { x: 0, y: 0, width: 800, height: 100 }, // Top water
+        { x: 0, y: 500, width: 800, height: 100 }, // Bottom water
+        { x: 0, y: 0, width: 50, height: 600 }, // Left water
+        { x: 750, y: 0, width: 50, height: 600 }, // Right water
+
+        // Bush
+        { x: 400, y: 305, width: 40, height: 30 }
+      ];
+
+      console.log('✅ Blocked zones set up');
+    }
+
+    createNPC() {
+      // Place parent NPC near starting area
+      const npcX = 500;
+      const npcY = 200;
+
+      this.npc = this.add.image(npcX, npcY, 'fish', 'char_adult')
+        .setScale(2)
+        .setDepth(9);
+
+      console.log('✅ NPC created at', npcX, npcY);
+    }
+
+    setupInteractableSpots() {
+      // Define all interactable locations
+      this.interactableSpots = [
+        {
+          id: 'npc',
+          x: 500,
+          y: 200,
+          radius: 60,
+          prompt: '💬 Space',
+          onActivate: () => this.showDialogue()
+        },
+        {
+          id: 'fishing_dock',
+          x: 120,
+          y: 420,
+          radius: 70,
+          prompt: '🎣 Space',
+          sprite: this.add.image(120, 420, 'terrain', 'log_large')
+            .setScale(1.5)
+            .setAlpha(0.9)
+            .setDepth(8),
+          onActivate: () => this.startFishing()
+        },
+        {
+          id: 'crab_area',
+          x: 650,
+          y: 450,
+          radius: 60,
+          prompt: '🦀 Space',
+          sprite: this.add.image(650, 450, 'fish', 'crab_blue')
+            .setScale(4)
+            .setDepth(8),
+          onActivate: () => this.showCrabPlaceholder()
+        },
+        {
+          id: 'tide_pool',
+          x: 200,
+          y: 200,
+          radius: 60,
+          prompt: '🐚 Space',
+          sprite: this.add.image(200, 200, 'terrain', 'rock_cluster')
+            .setScale(2)
+            .setDepth(8),
+          onActivate: () => this.showTidePoolPlaceholder()
+        },
+        {
+          id: 'sea_creature_spot',
+          x: 650,
+          y: 200,
+          radius: 60,
+          prompt: '🐙 Space',
+          sprite: this.add.image(650, 200, 'fish', 'seahorse_green')
+            .setScale(5)
+            .setDepth(8),
+          onActivate: () => this.showSeaCreaturePlaceholder()
+        }
+      ];
+
+      console.log('✅ Interactable spots set up:', this.interactableSpots.length);
+    }
+
+    checkInteractions() {
+      if (!GameState.overworldInputEnabled || !this.player) return;
+
+      const playerPos = this.player.getPosition();
+      let closestSpot = null;
+      let closestDist = Infinity;
+
+      // Find closest interactable within range
+      for (const spot of this.interactableSpots) {
+        const dx = playerPos.x - spot.x;
+        const dy = playerPos.y - spot.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < spot.radius && dist < closestDist) {
+          closestDist = dist;
+          closestSpot = spot;
+        }
+      }
+
+      // Update prompt
+      if (closestSpot) {
+        this.currentInteractable = closestSpot;
+        this.interactionPrompt.setText(closestSpot.prompt);
+        this.interactionPrompt.setPosition(closestSpot.x, closestSpot.y - 50);
+        this.interactionPrompt.setVisible(true);
+      } else {
+        this.currentInteractable = null;
+        this.interactionPrompt.setVisible(false);
+      }
+    }
+
+    handleSpacePress() {
+      // Priority: dialogue/mini-game UI first, then interactions
+      if (GameState.isDialogueOpen) {
+        this.closeDialogue();
+        return;
+      }
+
+      if (GameState.isMinigameActive) {
+        // Space is handled by mini-game itself
+        return;
+      }
+
+      // Activate current interactable
+      if (this.currentInteractable && GameState.overworldInputEnabled) {
+        this.currentInteractable.onActivate();
+      }
+    }
+
+    // ===== NPC DIALOGUE =====
+
+    showDialogue() {
+      if (GameState.isDialogueOpen || GameState.isMinigameActive) return;
+
+      GameState.openDialogue();
+
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const container = this.add.container(0, 0).setDepth(150);
+      this.dialoguePanel = container;
+
+      // Semi-transparent overlay
+      const overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.6)
+        .setOrigin(0)
+        .setInteractive();
+      container.add(overlay);
+
+      // Dialogue box
+      const boxWidth = 600;
+      const boxHeight = 150;
+
+      const outerBorder = this.add.rectangle(centerX, centerY + 150, boxWidth + 20, boxHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      container.add(outerBorder);
+
+      const dialogueBox = this.add.rectangle(centerX, centerY + 150, boxWidth, boxHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      container.add(dialogueBox);
+
+      // Get dialogue based on progress
+      const stats = GameState.fishCollection.getStats();
+      let message = 'Welcome to the island, Maxi!\n\nTry fishing at the dock or explore the other spots!';
+
+      if (stats.caught >= 5) {
+        message = `Great job! You've caught ${stats.caught} different fish!\n\nKeep exploring to find them all!`;
+      } else if (stats.caught > 0) {
+        message = `You've caught ${stats.caught} fish so far.\n\nThere are many more to discover!`;
+      }
+
+      const dialogueText = this.add.text(centerX, centerY + 140, message, {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        align: 'center',
+        wordWrap: { width: boxWidth - 40 }
+      }).setOrigin(0.5);
+      container.add(dialogueText);
+
+      const continueText = this.add.text(centerX, centerY + 210, 'Press SPACE to continue', {
+        fontSize: '14px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'italic'
+      }).setOrigin(0.5);
+      container.add(continueText);
+    }
+
+    closeDialogue() {
+      if (this.dialoguePanel) {
+        this.dialoguePanel.destroy();
+        this.dialoguePanel = null;
+      }
+      GameState.enableOverworld();
+    }
+
+    // ===== FISHING (INTEGRATED WITH OVERWORLD) =====
+
+    startFishing() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
       console.log('🎣 Starting fishing mini-game...');
       this.fishingMinigame = new FishingMinigame(this, this.onFishingComplete.bind(this));
     }
@@ -427,10 +724,118 @@
         // Show "New Fish!" popup if first time
         if (wasNew) {
           this.showNewFishPopup(caughtFish);
+        } else {
+          // Re-enable overworld immediately if not showing new fish popup
+          GameState.enableOverworld();
         }
       } else {
         console.log('😢 The fish got away...');
+        GameState.enableOverworld();
       }
+    }
+
+    // ===== PLACEHOLDER MINI-GAMES =====
+
+    showCrabPlaceholder() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      this.showPlaceholderPanel(
+        '🦀 CRAB DASH',
+        'Coming soon!\n\nRace the crab to the finish line\nby hammering the Space key!'
+      );
+    }
+
+    showTidePoolPlaceholder() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      this.showPlaceholderPanel(
+        '🐚 TIDE POOL MATCH',
+        'Coming soon!\n\nFlip cards and find all the\nmatching sea creature pairs!'
+      );
+    }
+
+    showSeaCreaturePlaceholder() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      this.showPlaceholderPanel(
+        '🐙 SEA CREATURE SPOTTER',
+        'Coming soon!\n\nSpot creatures as they swim through\nthe target zone. Press Space to catch them!'
+      );
+    }
+
+    showPlaceholderPanel(title, description) {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const container = this.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0)
+        .setInteractive();
+      container.add(overlay);
+
+      // Panel
+      const panelWidth = 500;
+      const panelHeight = 300;
+
+      const outerBorder = this.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      container.add(outerBorder);
+
+      const panel = this.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      container.add(panel);
+
+      // Title
+      const titleText = this.add.text(centerX, centerY - 100, title, {
+        fontSize: '28px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(titleText);
+
+      // Description
+      const descText = this.add.text(centerX, centerY, description, {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        align: 'center',
+        lineSpacing: 5
+      }).setOrigin(0.5);
+      container.add(descText);
+
+      // Close button
+      const closeBtn = this.add.rectangle(centerX, centerY + 110, 200, 40, 0x0F380F)
+        .setInteractive({ useHandCursor: true });
+      container.add(closeBtn);
+
+      const closeBtnText = this.add.text(centerX, centerY + 110, 'BACK (Space)', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(closeBtnText);
+
+      // Hover effect
+      closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x8BAC0F));
+      closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x0F380F));
+
+      // Close handlers
+      const closePlaceholder = () => {
+        this.input.keyboard.off('keydown-SPACE', closePlaceholder);
+        closeBtn.off('pointerdown');
+        container.destroy();
+        GameState.enableOverworld();
+      };
+
+      closeBtn.on('pointerdown', closePlaceholder);
+      this.input.keyboard.once('keydown-SPACE', closePlaceholder);
     }
 
     showNewFishPopup(fish) {
@@ -510,6 +915,7 @@
         this.input.keyboard.off('keydown-SPACE', closePopup);
         this.input.off('pointerdown', closePopup);
         container.destroy();
+        GameState.enableOverworld(); // Re-enable movement after popup
       };
 
       this.input.keyboard.once('keydown-SPACE', closePopup);
@@ -521,8 +927,10 @@
         // Close panel
         this.collectionPanel.destroy();
         this.collectionPanel = null;
+        GameState.enableOverworld();
       } else {
         // Open panel
+        GameState.disableOverworld();
         this.showCollectionPanel();
       }
     }
@@ -645,7 +1053,9 @@
       if (this.debugPanel) {
         this.debugPanel.destroy();
         this.debugPanel = null;
+        GameState.enableOverworld();
       } else {
+        GameState.disableOverworld();
         this.showDebugPanel();
       }
     }
