@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tropical Island Paradise</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
+  <script>
+    // CDN Fallback - load from alternative CDN if primary fails
+    window.addEventListener('load', function() {
+      if (typeof Phaser === 'undefined') {
+        console.warn('Primary CDN failed, loading Phaser from fallback CDN...');
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js';
+        script.onerror = function() {
+          document.getElementById('loading-text').textContent = '❌ Failed to load game engine';
+          document.getElementById('status-info').textContent = 'Please check your internet connection';
+        };
+        document.head.appendChild(script);
+      }
+    });
+  </script>
   <style>
     body{margin:0;padding:20px;background:linear-gradient(135deg,#87CEEB 0%,#4682B4 100%);display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif}
     #game-container{border:4px solid #2E86AB;border-radius:15px;box-shadow:0 15px 35px rgba(0,0,0,.4);overflow:hidden;position:relative}
@@ -14,6 +29,21 @@
     .loading-bar{width:350px;height:25px;background:rgba(255,255,255,.3);border-radius:15px;border:3px solid #fff;box-shadow:0 4px 8px rgba(0,0,0,.3);overflow:hidden}
     .loading-progress{height:100%;background:linear-gradient(90deg,#32CD32,#228B22,#90EE90);width:0%;transition:width .4s ease;border-radius:12px}
     .status-info{margin-top:20px;color:rgba(255,255,255,.9);font-size:16px;text-shadow:1px 1px 2px rgba(0,0,0,.5)}
+
+    /* Touch Controls */
+    #touch-controls{position:fixed;bottom:20px;left:0;right:0;display:none;z-index:100;pointer-events:none}
+    #touch-controls.visible{display:flex;justify-content:space-between;padding:0 20px}
+    .touch-btn{background:rgba(155,188,15,.7);border:3px solid rgba(15,56,15,.8);border-radius:50%;width:60px;height:60px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#0F380F;font-weight:bold;user-select:none;pointer-events:auto;box-shadow:0 4px 8px rgba(0,0,0,.3);touch-action:none}
+    .touch-btn:active{background:rgba(15,56,15,.8);transform:scale(.95)}
+    .dpad{position:relative;width:180px;height:180px}
+    .dpad .touch-btn{position:absolute}
+    .dpad .up{top:0;left:60px}
+    .dpad .down{bottom:0;left:60px}
+    .dpad .left{top:60px;left:0}
+    .dpad .right{top:60px;right:0}
+    .action-btns{display:flex;gap:15px;align-items:flex-end}
+    .action-btns .touch-btn{width:70px;height:70px;font-size:14px}
+    @media (max-width:768px){#touch-controls.visible{display:flex}}
   </style>
 </head>
 <body>
@@ -22,6 +52,20 @@
       <div class="loading-text" id="loading-text">🏝️ Loading Tropical Paradise...</div>
       <div class="loading-bar"><div class="loading-progress" id="loading-progress"></div></div>
       <div class="status-info" id="status-info">Fetching assets from GitHub Pages...</div>
+    </div>
+  </div>
+
+  <!-- Touch Controls for Mobile -->
+  <div id="touch-controls">
+    <div class="dpad">
+      <div class="touch-btn up" data-key="up">↑</div>
+      <div class="touch-btn down" data-key="down">↓</div>
+      <div class="touch-btn left" data-key="left">←</div>
+      <div class="touch-btn right" data-key="right">→</div>
+    </div>
+    <div class="action-btns">
+      <div class="touch-btn" data-key="space">INTERACT</div>
+      <div class="touch-btn" data-key="c">FISH</div>
     </div>
   </div>
 
@@ -1010,6 +1054,44 @@
       }
     }
 
+    exportProgress() {
+      // Gather all progress data
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        childName: 'Maxi', // Could be customizable in future
+        fishCollection: GameState.fishCollection.collection,
+        fishStats: GameState.fishCollection.getStats(),
+        learningProgress: GameState.learningProgress.data,
+        version: '1.0'
+      };
+
+      // Create downloadable JSON file
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+
+      // Create temporary download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `maxi-island-progress-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Show confirmation
+      const confirmText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'Progress Exported!', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#32CD32',
+        fontStyle: 'bold',
+        backgroundColor: '#000000',
+        padding: { x: 20, y: 10 }
+      }).setOrigin(0.5).setDepth(200);
+
+      this.time.delayedCall(2000, () => confirmText.destroy());
+    }
+
     showCollectionPanel() {
       const container = this.add.container(0, 0).setDepth(150);
       this.collectionPanel = container;
@@ -1106,13 +1188,30 @@
         }
       });
 
+      // Export button (for parents/teachers)
+      const exportBtn = this.add.rectangle(centerX - 110, centerY + 210, 180, 40, 0x0F380F)
+        .setInteractive({ useHandCursor: true });
+      container.add(exportBtn);
+
+      const exportBtnText = this.add.text(centerX - 110, centerY + 210, 'EXPORT', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(exportBtnText);
+
+      exportBtn.on('pointerover', () => exportBtn.setFillStyle(0x8BAC0F));
+      exportBtn.on('pointerout', () => exportBtn.setFillStyle(0x0F380F));
+      exportBtn.on('pointerdown', () => this.exportProgress());
+
       // Close button
-      const closeBtn = this.add.rectangle(centerX, centerY + 210, 200, 40, 0x0F380F)
+      const closeBtn = this.add.rectangle(centerX + 110, centerY + 210, 180, 40, 0x0F380F)
         .setInteractive({ useHandCursor: true });
       container.add(closeBtn);
 
-      const closeBtnText = this.add.text(centerX, centerY + 210, 'CLOSE (C)', {
-        fontSize: '20px',
+      const closeBtnText = this.add.text(centerX + 110, centerY + 210, 'CLOSE (C)', {
+        fontSize: '18px',
         fontFamily: 'Arial',
         fill: '#9BBC0F',
         fontStyle: 'bold'
@@ -2622,6 +2721,73 @@
     GameState.currentFishingGame = null;
     originalClose.call(this);
   };
+
+  // ===== TOUCH CONTROLS =====
+  (function initTouchControls() {
+    const touchControls = document.getElementById('touch-controls');
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    // Show controls on touch devices
+    if (isTouchDevice) {
+      touchControls.classList.add('visible');
+    }
+
+    // Map of active touches
+    const activeTouches = new Set();
+
+    // Simulate keyboard events for game
+    const keyMap = {
+      'up': 'ArrowUp',
+      'down': 'ArrowDown',
+      'left': 'ArrowLeft',
+      'right': 'ArrowRight',
+      'space': ' ',
+      'c': 'c'
+    };
+
+    // Handle touch button press
+    document.querySelectorAll('.touch-btn').forEach(btn => {
+      const key = btn.dataset.key;
+
+      const handleStart = (e) => {
+        e.preventDefault();
+        if (!activeTouches.has(key)) {
+          activeTouches.add(key);
+          // Dispatch keyboard event to game
+          const event = new KeyboardEvent('keydown', {
+            key: keyMap[key],
+            code: keyMap[key] === ' ' ? 'Space' : 'Key' + keyMap[key].toUpperCase(),
+            bubbles: true
+          });
+          document.dispatchEvent(event);
+        }
+      };
+
+      const handleEnd = (e) => {
+        e.preventDefault();
+        if (activeTouches.has(key)) {
+          activeTouches.delete(key);
+          // Dispatch keyup event
+          const event = new KeyboardEvent('keyup', {
+            key: keyMap[key],
+            code: keyMap[key] === ' ' ? 'Space' : 'Key' + keyMap[key].toUpperCase(),
+            bubbles: true
+          });
+          document.dispatchEvent(event);
+        }
+      };
+
+      // Touch events
+      btn.addEventListener('touchstart', handleStart, {passive: false});
+      btn.addEventListener('touchend', handleEnd, {passive: false});
+      btn.addEventListener('touchcancel', handleEnd, {passive: false});
+
+      // Mouse events (for testing on desktop)
+      btn.addEventListener('mousedown', handleStart);
+      btn.addEventListener('mouseup', handleEnd);
+      btn.addEventListener('mouseleave', handleEnd);
+    });
+  })();
 
   // ===== GAME INITIALIZATION =====
   new Phaser.Game({
