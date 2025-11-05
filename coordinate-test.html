@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sprite Coordinate Verification</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #222;
+      color: #fff;
+      font-family: monospace;
+    }
+    canvas {
+      border: 2px solid #fff;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    .info {
+      margin: 10px 0;
+      padding: 10px;
+      background: #333;
+    }
+    .error { color: #ff6b6b; }
+    .success { color: #51cf66; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Sprite Coordinate Verification</h1>
+  <div id="info" class="info">Loading...</div>
+  <canvas id="fish-canvas"></canvas>
+  <canvas id="terrain-canvas"></canvas>
+
+  <script>
+    const infoDiv = document.getElementById('info');
+
+    // Load and display fish atlas
+    const fishImg = new Image();
+    fishImg.onload = () => {
+      infoDiv.innerHTML += '<div class="success">✓ fish_characters.png loaded: ' + fishImg.width + 'x' + fishImg.height + '</div>';
+      drawAtlas(fishImg, 'fish-canvas', fishCoords);
+    };
+    fishImg.onerror = () => {
+      infoDiv.innerHTML += '<div class="error">✗ Failed to load fish_characters.png</div>';
+    };
+    fishImg.src = 'fish_characters.png';
+
+    // Load and display terrain atlas
+    const terrainImg = new Image();
+    terrainImg.onload = () => {
+      infoDiv.innerHTML += '<div class="success">✓ terrain_flora.png loaded: ' + terrainImg.width + 'x' + terrainImg.height + '</div>';
+      drawAtlas(terrainImg, 'terrain-canvas', terrainCoords);
+    };
+    terrainImg.onerror = () => {
+      infoDiv.innerHTML += '<div class="error">✗ Failed to load terrain_flora.png</div>';
+    };
+    terrainImg.src = 'terrain_flora.png';
+
+    const fishCoords = {
+      "char_adult": {"x": 0, "y": 0, "w": 64, "h": 96},
+      "char_child": {"x": 64, "y": 0, "w": 32, "h": 48},
+      "fish_blue": {"x": 96, "y": 0, "w": 32, "h": 32},
+      "fish_yellow": {"x": 128, "y": 0, "w": 32, "h": 32},
+      "fish_orange": {"x": 0, "y": 96, "w": 32, "h": 32},
+      "fish_red": {"x": 32, "y": 96, "w": 32, "h": 32},
+      "fish_green": {"x": 64, "y": 96, "w": 32, "h": 32},
+      "fish_purple": {"x": 96, "y": 96, "w": 32, "h": 32}
+    };
+
+    const terrainCoords = {
+      "palm_big": {"x": 0, "y": 0, "w": 64, "h": 128},
+      "palm_small": {"x": 64, "y": 0, "w": 64, "h": 128},
+      "bush_large": {"x": 128, "y": 0, "w": 64, "h": 64},
+      "sand_irregular": {"x": 128, "y": 64, "w": 96, "h": 56},
+      "wave_shallow": {"x": 0, "y": 128, "w": 176, "h": 24}
+    };
+
+    function drawAtlas(img, canvasId, coords) {
+      const canvas = document.getElementById(canvasId);
+      canvas.width = 500;
+      canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+
+      // Draw full image scaled down
+      const scale = Math.min(500 / img.width, 300 / img.height);
+      ctx.drawImage(img, 0, 0, img.width * scale, img.height * scale);
+
+      // Draw coordinate rectangles
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 2;
+      Object.entries(coords).forEach(([name, frame]) => {
+        ctx.strokeRect(
+          frame.x * scale,
+          frame.y * scale,
+          frame.w * scale,
+          frame.h * scale
+        );
+
+        // Draw label
+        ctx.fillStyle = '#ffff00';
+        ctx.font = '10px monospace';
+        ctx.fillText(name, frame.x * scale + 2, frame.y * scale + 10);
+      });
+
+      infoDiv.innerHTML += '<div class="success">✓ Drew ' + Object.keys(coords).length + ' frame boundaries on ' + canvasId + '</div>';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sprite Atlas Diagnostic</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #222;
+      color: #fff;
+    }
+    .atlas-section {
+      margin-bottom: 40px;
+      border: 2px solid #444;
+      padding: 20px;
+    }
+    .sprite-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .sprite-item {
+      border: 1px solid #666;
+      padding: 10px;
+      text-align: center;
+      background: #333;
+    }
+    .sprite-item canvas {
+      background: repeating-conic-gradient(#444 0% 25%, #555 0% 50%)
+                  50% / 20px 20px;
+      border: 1px solid #888;
+    }
+    .sprite-name {
+      font-size: 10px;
+      margin-top: 5px;
+      word-break: break-all;
+    }
+    .error {
+      color: #ff6b6b;
+    }
+    .success {
+      color: #51cf66;
+    }
+    h1, h2 {
+      color: #4dabf7;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Sprite Atlas Diagnostic Tool</h1>
+  <div id="status"></div>
+  <div id="terrain-section" class="atlas-section"></div>
+  <div id="fish-section" class="atlas-section"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
+  <script>
+    const statusDiv = document.getElementById('status');
+    const terrainSection = document.getElementById('terrain-section');
+    const fishSection = document.getElementById('fish-section');
+
+    class DiagnosticScene extends Phaser.Scene {
+      constructor() {
+        super('DiagnosticScene');
+      }
+
+      preload() {
+        statusDiv.innerHTML = '<p class="success">⏳ Loading atlases...</p>';
+
+        this.load.atlas('terrain', 'terrain_flora.png', 'terrain_flora.json');
+        this.load.atlas('fish', 'fish_characters.png', 'fish_characters.json');
+
+        this.load.on('complete', () => {
+          statusDiv.innerHTML += '<p class="success">✅ Atlas files loaded</p>';
+        });
+
+        this.load.on('loaderror', (file) => {
+          statusDiv.innerHTML += `<p class="error">❌ Failed to load: ${file.key}</p>`;
+        });
+      }
+
+      create() {
+        statusDiv.innerHTML += '<p class="success">✅ Scene created</p>';
+
+        // Check if atlases exist
+        if (!this.textures.exists('terrain')) {
+          statusDiv.innerHTML += '<p class="error">❌ Terrain atlas not found!</p>';
+          return;
+        }
+        if (!this.textures.exists('fish')) {
+          statusDiv.innerHTML += '<p class="error">❌ Fish atlas not found!</p>';
+          return;
+        }
+
+        statusDiv.innerHTML += '<p class="success">✅ Both atlases loaded successfully</p>';
+
+        // Display terrain atlas
+        this.displayAtlas('terrain', terrainSection);
+
+        // Display fish atlas
+        this.displayAtlas('fish', fishSection);
+      }
+
+      displayAtlas(atlasKey, container) {
+        const atlas = this.textures.get(atlasKey);
+        const frames = atlas.getFrameNames();
+
+        container.innerHTML = `
+          <h2>${atlasKey.toUpperCase()} Atlas</h2>
+          <p>Total frames: ${frames.length}</p>
+          <div class="sprite-grid" id="${atlasKey}-grid"></div>
+        `;
+
+        const grid = document.getElementById(`${atlasKey}-grid`);
+
+        frames.forEach(frameName => {
+          const spriteItem = document.createElement('div');
+          spriteItem.className = 'sprite-item';
+
+          // Create a canvas to render the sprite
+          const canvas = document.createElement('canvas');
+          canvas.width = 100;
+          canvas.height = 100;
+
+          // Try to create the sprite
+          try {
+            const sprite = this.add.image(0, 0, atlasKey, frameName);
+            sprite.setVisible(false);
+
+            // Get the texture frame
+            const frame = sprite.frame;
+            const texture = sprite.texture;
+
+            // Draw to canvas
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+
+            // Get the source image
+            const source = texture.getSourceImage();
+
+            // Draw the specific frame
+            if (frame && frame.cutWidth > 0 && frame.cutHeight > 0) {
+              const scale = Math.min(100 / frame.cutWidth, 100 / frame.cutHeight);
+              const drawWidth = frame.cutWidth * scale;
+              const drawHeight = frame.cutHeight * scale;
+              const offsetX = (100 - drawWidth) / 2;
+              const offsetY = (100 - drawHeight) / 2;
+
+              ctx.drawImage(
+                source,
+                frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight,
+                offsetX, offsetY, drawWidth, drawHeight
+              );
+            }
+
+            sprite.destroy();
+
+            spriteItem.innerHTML = `
+              ${canvas.outerHTML}
+              <div class="sprite-name success">${frameName}</div>
+              <div class="sprite-name" style="font-size: 9px;">
+                ${frame.cutWidth}×${frame.cutHeight}
+              </div>
+            `;
+          } catch (error) {
+            spriteItem.innerHTML = `
+              ${canvas.outerHTML}
+              <div class="sprite-name error">${frameName}</div>
+              <div class="sprite-name error" style="font-size: 9px;">ERROR</div>
+            `;
+          }
+
+          grid.appendChild(spriteItem);
+        });
+      }
+    }
+
+    // Create a headless game just for loading
+    new Phaser.Game({
+      type: Phaser.CANVAS,
+      width: 1,
+      height: 1,
+      parent: document.createElement('div'),
+      scene: DiagnosticScene,
+      render: {
+        pixelArt: true
+      }
+    });
+  </script>
+</body>
+</html>
