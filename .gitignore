@@ -1,0 +1,15 @@
+# Original bloated sprite atlas backups (not needed in repo)
+*_ORIGINAL_BLOATED.png
+*_ORIGINAL.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Diagnostic/test files
+diagnostic.html
+simple-test.html
+coordinate-test.html
+
+# PR helper files
+PR_DESCRIPTION.md
