@@ -10,3 +10,6 @@ __pycache__/
 diagnostic.html
 simple-test.html
 coordinate-test.html
+
+# PR helper files
+PR_DESCRIPTION.md
