@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Test Suite</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #1a1a1a;
+      color: #00ff00;
+      padding: 20px;
+    }
+    #testResults {
+      background: #000;
+      padding: 20px;
+      border: 2px solid #00ff00;
+      margin-bottom: 20px;
+    }
+    .pass { color: #00ff00; }
+    .fail { color: #ff0000; }
+    .warning { color: #ffaa00; }
+    canvas {
+      border: 2px solid #00ff00;
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎮 Game Test Suite</h1>
+  <div id="testResults">
+    <h2>Test Results:</h2>
+    <div id="results"></div>
+  </div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <script type="module">
+    const results = document.getElementById('results');
+
+    function log(message, type = 'info') {
+      const className = type === 'pass' ? 'pass' : type === 'fail' ? 'fail' : type === 'warning' ? 'warning' : '';
+      const prefix = type === 'pass' ? '✓' : type === 'fail' ? '✗' : type === 'warning' ? '⚠' : '→';
+      results.innerHTML += `<div class="${className}">${prefix} ${message}</div>`;
+      console.log(`${prefix} ${message}`);
+    }
+
+    async function runTests() {
+      log('Starting tests...', 'info');
+
+      // Test 1: Import main module
+      try {
+        const mainModule = await import('./js/main.js');
+        log('✓ main.js loaded successfully', 'pass');
+      } catch (e) {
+        log(`✗ Failed to load main.js: ${e.message}`, 'fail');
+        return;
+      }
+
+      // Test 2: Import core modules
+      try {
+        await import('./js/core/Game.js');
+        log('Game.js imported', 'pass');
+
+        await import('./js/core/Input.js');
+        log('Input.js imported', 'pass');
+
+        await import('./js/core/SceneManager.js');
+        log('SceneManager.js imported', 'pass');
+
+        await import('./js/core/AssetLoader.js');
+        log('AssetLoader.js imported', 'pass');
+
+        await import('./js/core/SpriteAtlas.js');
+        log('SpriteAtlas.js imported', 'pass');
+      } catch (e) {
+        log(`Core module import failed: ${e.message}`, 'fail');
+      }
+
+      // Test 3: Import entity modules
+      try {
+        await import('./js/entities/Player.js');
+        log('Player.js imported', 'pass');
+
+        await import('./js/entities/Interactable.js');
+        log('Interactable.js imported', 'pass');
+      } catch (e) {
+        log(`Entity module import failed: ${e.message}`, 'fail');
+      }
+
+      // Test 4: Import scene modules
+      try {
+        await import('./js/scenes/IslandScene.js');
+        log('IslandScene.js imported', 'pass');
+
+        await import('./js/scenes/FishingScene.js');
+        log('FishingScene.js imported', 'pass');
+
+        await import('./js/scenes/CountingScene.js');
+        log('CountingScene.js imported', 'pass');
+
+        await import('./js/scenes/LetterScene.js');
+        log('LetterScene.js imported', 'pass');
+      } catch (e) {
+        log(`Scene module import failed: ${e.message}`, 'fail');
+      }
+
+      // Test 5: Import utility modules
+      try {
+        await import('./js/state/GameState.js');
+        log('GameState.js imported', 'pass');
+
+        await import('./js/utils/collision.js');
+        log('collision.js imported', 'pass');
+      } catch (e) {
+        log(`Utility module import failed: ${e.message}`, 'fail');
+      }
+
+      // Test 6: Test asset loading
+      try {
+        const { AssetLoader } = await import('./js/core/AssetLoader.js');
+        const loader = new AssetLoader();
+
+        const fishAtlas = await loader.loadAtlas('fish', 'fish_characters.png', 'fish_characters.json');
+        log(`Fish atlas loaded: ${Object.keys(fishAtlas.frames).length} frames`, 'pass');
+
+        const terrainAtlas = await loader.loadAtlas('terrain', 'terrain_flora.png', 'terrain_flora.json');
+        log(`Terrain atlas loaded: ${Object.keys(terrainAtlas.frames).length} frames`, 'pass');
+      } catch (e) {
+        log(`Asset loading failed: ${e.message}`, 'fail');
+      }
+
+      // Test 7: Test Game initialization
+      try {
+        const { Game } = await import('./js/core/Game.js');
+        const game = new Game('gameCanvas', 800, 600);
+        log('Game instance created', 'pass');
+
+        if (game.canvas && game.ctx) {
+          log('Canvas and context initialized', 'pass');
+        } else {
+          log('Canvas or context missing', 'fail');
+        }
+      } catch (e) {
+        log(`Game initialization failed: ${e.message}`, 'fail');
+      }
+
+      log('Tests complete!', 'info');
+    }
+
+    // Catch any uncaught errors
+    window.addEventListener('error', (e) => {
+      log(`Runtime error: ${e.message} at ${e.filename}:${e.lineno}`, 'fail');
+    });
+
+    window.addEventListener('unhandledrejection', (e) => {
+      log(`Unhandled promise rejection: ${e.reason}`, 'fail');
+    });
+
+    runTests();
+  </script>
+</body>
+</html>
