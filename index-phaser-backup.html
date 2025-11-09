@@ -1,0 +1,2805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tropical Island Paradise</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
+  <script>
+    // CDN Fallback - load from alternative CDN if primary fails
+    window.addEventListener('load', function() {
+      if (typeof Phaser === 'undefined') {
+        console.warn('Primary CDN failed, loading Phaser from fallback CDN...');
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js';
+        script.onerror = function() {
+          document.getElementById('loading-text').textContent = '❌ Failed to load game engine';
+          document.getElementById('status-info').textContent = 'Please check your internet connection';
+        };
+        document.head.appendChild(script);
+      }
+    });
+  </script>
+  <style>
+    body{margin:0;padding:20px;background:linear-gradient(135deg,#87CEEB 0%,#4682B4 100%);display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif}
+    #game-container{border:4px solid #2E86AB;border-radius:15px;box-shadow:0 15px 35px rgba(0,0,0,.4);overflow:hidden;position:relative}
+    .loading-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(135,206,235,.95),rgba(70,130,180,.95));display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:1000;transition:all .6s ease-out}
+    .loading-text{color:#fff;font-size:28px;font-weight:bold;text-shadow:3px 3px 6px rgba(0,0,0,.7);margin-bottom:25px;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+    .loading-bar{width:350px;height:25px;background:rgba(255,255,255,.3);border-radius:15px;border:3px solid #fff;box-shadow:0 4px 8px rgba(0,0,0,.3);overflow:hidden}
+    .loading-progress{height:100%;background:linear-gradient(90deg,#32CD32,#228B22,#90EE90);width:0%;transition:width .4s ease;border-radius:12px}
+    .status-info{margin-top:20px;color:rgba(255,255,255,.9);font-size:16px;text-shadow:1px 1px 2px rgba(0,0,0,.5)}
+
+    /* Touch Controls */
+    #touch-controls{position:fixed;bottom:20px;left:0;right:0;display:none;z-index:100;pointer-events:none}
+    #touch-controls.visible{display:flex;justify-content:space-between;padding:0 20px}
+    .touch-btn{background:rgba(155,188,15,.7);border:3px solid rgba(15,56,15,.8);border-radius:50%;width:60px;height:60px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#0F380F;font-weight:bold;user-select:none;pointer-events:auto;box-shadow:0 4px 8px rgba(0,0,0,.3);touch-action:none}
+    .touch-btn:active{background:rgba(15,56,15,.8);transform:scale(.95)}
+    .dpad{position:relative;width:180px;height:180px}
+    .dpad .touch-btn{position:absolute}
+    .dpad .up{top:0;left:60px}
+    .dpad .down{bottom:0;left:60px}
+    .dpad .left{top:60px;left:0}
+    .dpad .right{top:60px;right:0}
+    .action-btns{display:flex;gap:15px;align-items:flex-end}
+    .action-btns .touch-btn{width:70px;height:70px;font-size:14px}
+    @media (max-width:768px){#touch-controls.visible{display:flex}}
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div class="loading-overlay" id="loading-overlay">
+      <div class="loading-text" id="loading-text">🏝️ Loading Tropical Paradise...</div>
+      <div class="loading-bar"><div class="loading-progress" id="loading-progress"></div></div>
+      <div class="status-info" id="status-info">Fetching assets from GitHub Pages...</div>
+    </div>
+  </div>
+
+  <!-- Touch Controls for Mobile -->
+  <div id="touch-controls">
+    <div class="dpad">
+      <div class="touch-btn up" data-key="up">↑</div>
+      <div class="touch-btn down" data-key="down">↓</div>
+      <div class="touch-btn left" data-key="left">←</div>
+      <div class="touch-btn right" data-key="right">→</div>
+    </div>
+    <div class="action-btns">
+      <div class="touch-btn" data-key="space">INTERACT</div>
+      <div class="touch-btn" data-key="c">FISH</div>
+    </div>
+  </div>
+
+  <script>
+  // ===== CONSTANTS =====
+  const GAME_WIDTH = 800;
+  const GAME_HEIGHT = 600;
+  const COLORS = {
+    SKY: 0x87CEEB,
+    WHITE: 0xFFFFFF,
+    BLACK: 0x000000,
+    BLUE: 0x2E86AB,
+    GREEN: 0x32CD32,
+    RED: 0xFF6B6B,
+    YELLOW: 0xFFD700
+  };
+
+  // Fish types that can be caught (expanded and normalized)
+  const FISH_TYPES = [
+    {id: 'fish_blue', displayName: 'Blue Fish', rarity: 'Common'},
+    {id: 'fish_yellow', displayName: 'Yellow Fish', rarity: 'Common'},
+    {id: 'fish_orange', displayName: 'Orange Fish', rarity: 'Common'},
+    {id: 'fish_red', displayName: 'Red Fish', rarity: 'Uncommon'},
+    {id: 'fish_green', displayName: 'Green Fish', rarity: 'Uncommon'},
+    {id: 'fish_purple', displayName: 'Purple Fish', rarity: 'Rare'},
+    {id: 'fish_gray', displayName: 'Gray Fish', rarity: 'Uncommon'},
+    {id: 'fish_spotted', displayName: 'Spotted Fish', rarity: 'Rare'},
+    {id: 'angelfish', displayName: 'Angelfish', rarity: 'Rare'},
+    {id: 'fish_shark_small', displayName: 'Small Shark', rarity: 'Epic'},
+    {id: 'octopus_orange', displayName: 'Orange Octopus', rarity: 'Epic'},
+    {id: 'crab_blue', displayName: 'Blue Crab', rarity: 'Uncommon'}
+  ];
+
+  // ===== GAME STATE MANAGER =====
+  const GameState = {
+    fishCollection: null,
+    learningProgress: null,
+    debugMode: false,
+    currentFishingGame: null, // Track active fishing game for drift mechanic
+
+    // Phase 2: Overworld state
+    overworldInputEnabled: true,
+    isMinigameActive: false,
+    isDialogueOpen: false,
+    player: null,
+
+    init() {
+      this.fishCollection = new FishCollection();
+      this.fishCollection.load();
+      this.learningProgress = new LearningProgress();
+      this.learningProgress.load();
+    },
+
+    // Helper methods for state management
+    disableOverworld() {
+      this.overworldInputEnabled = false;
+    },
+
+    enableOverworld() {
+      this.overworldInputEnabled = true;
+      this.isMinigameActive = false;
+      this.isDialogueOpen = false;
+    },
+
+    startMinigame() {
+      this.isMinigameActive = true;
+      this.disableOverworld();
+    },
+
+    openDialogue() {
+      this.isDialogueOpen = true;
+      this.disableOverworld();
+    }
+  };
+
+  // ===== FISH COLLECTION MANAGER =====
+  class FishCollection {
+    constructor() {
+      this.collection = {}; // id -> {seen, caught, count}
+      this.storageKey = 'maxisIsland.collection.v1';
+
+      // Initialize all fish as unseen
+      FISH_TYPES.forEach(fish => {
+        this.collection[fish.id] = {
+          seen: false,
+          caught: false,
+          count: 0
+        };
+      });
+    }
+
+    // Mark a fish as caught
+    catchFish(fishId) {
+      if (!this.collection[fishId]) {
+        console.warn(`Unknown fish: ${fishId}`);
+        return false;
+      }
+
+      const wasNew = !this.collection[fishId].caught;
+      this.collection[fishId].seen = true;
+      this.collection[fishId].caught = true;
+      this.collection[fishId].count++;
+
+      this.save();
+      return wasNew; // Return true if this is the first time catching this fish
+    }
+
+    // Get fish data
+    getFishData(fishId) {
+      return this.collection[fishId] || {seen: false, caught: false, count: 0};
+    }
+
+    // Get all fish with their collection status
+    getAllFish() {
+      return FISH_TYPES.map(fish => ({
+        ...fish,
+        ...this.collection[fish.id]
+      }));
+    }
+
+    // Get statistics
+    getStats() {
+      const total = FISH_TYPES.length;
+      const caught = Object.values(this.collection).filter(f => f.caught).length;
+      const totalCatches = Object.values(this.collection).reduce((sum, f) => sum + f.count, 0);
+
+      return { total, caught, totalCatches };
+    }
+
+    // Save to localStorage
+    save() {
+      try {
+        localStorage.setItem(this.storageKey, JSON.stringify(this.collection));
+      } catch (e) {
+        console.error('Failed to save collection:', e);
+      }
+    }
+
+    // Load from localStorage
+    load() {
+      try {
+        const saved = localStorage.getItem(this.storageKey);
+        if (saved) {
+          const loaded = JSON.parse(saved);
+          // Merge saved data with current collection (handles new fish being added)
+          Object.keys(loaded).forEach(fishId => {
+            if (this.collection[fishId]) {
+              this.collection[fishId] = loaded[fishId];
+            }
+          });
+          console.log('✅ Collection loaded from storage');
+        }
+      } catch (e) {
+        console.error('Failed to load collection, starting fresh:', e);
+      }
+    }
+
+    // Reset collection (for testing)
+    reset() {
+      FISH_TYPES.forEach(fish => {
+        this.collection[fish.id] = {seen: false, caught: false, count: 0};
+      });
+      this.save();
+    }
+  }
+
+  // ===== LEARNING PROGRESS TRACKER =====
+  class LearningProgress {
+    constructor() {
+      this.storageKey = 'maxisIsland.learning.v1';
+      this.data = {
+        countingGamesPlayed: 0,
+        crabQuestionsCorrect: 0,
+        crabQuestionsTotal: 0,
+        lettersFound: [],
+        letterPairsCleared: 0,
+        sequencesCompleted: 0
+      };
+    }
+
+    // Record counting game completion
+    recordCountingGame(correct) {
+      this.data.countingGamesPlayed++;
+      if (correct) {
+        // Could track correct answers if needed
+      }
+      this.save();
+    }
+
+    // Record crab race question
+    recordCrabQuestion(correct) {
+      this.data.crabQuestionsTotal++;
+      if (correct) {
+        this.data.crabQuestionsCorrect++;
+      }
+      this.save();
+    }
+
+    // Record letter found
+    recordLetterFound(letter) {
+      if (!this.data.lettersFound.includes(letter)) {
+        this.data.lettersFound.push(letter);
+      }
+      this.save();
+    }
+
+    // Record letter pair completion
+    recordLetterPairs() {
+      this.data.letterPairsCleared++;
+      this.save();
+    }
+
+    // Record sequence completion
+    recordSequence(correct) {
+      if (correct) {
+        this.data.sequencesCompleted++;
+      }
+      this.save();
+    }
+
+    // Get stats for NPC dialogue
+    getStats() {
+      return {
+        ...this.data,
+        uniqueLetters: this.data.lettersFound.length
+      };
+    }
+
+    // Save to localStorage
+    save() {
+      try {
+        localStorage.setItem(this.storageKey, JSON.stringify(this.data));
+      } catch (e) {
+        console.error('Failed to save learning progress:', e);
+      }
+    }
+
+    // Load from localStorage
+    load() {
+      try {
+        const saved = localStorage.getItem(this.storageKey);
+        if (saved) {
+          this.data = { ...this.data, ...JSON.parse(saved) };
+          console.log('✅ Learning progress loaded');
+        }
+      } catch (e) {
+        console.error('Failed to load learning progress, starting fresh:', e);
+      }
+    }
+
+    // Reset progress (for testing)
+    reset() {
+      this.data = {
+        countingGamesPlayed: 0,
+        crabQuestionsCorrect: 0,
+        crabQuestionsTotal: 0,
+        lettersFound: [],
+        letterPairsCleared: 0,
+        sequencesCompleted: 0
+      };
+      this.save();
+    }
+  }
+
+  // ===== PLAYER CLASS =====
+  class Player {
+    constructor(scene, x, y) {
+      this.scene = scene;
+      this.sprite = scene.add.image(x, y, 'fish', 'char_child').setDepth(10);
+      this.x = x;
+      this.y = y;
+      this.speed = 2.5; // Child-friendly speed
+      this.hitboxWidth = 24;
+      this.hitboxHeight = 36;
+    }
+
+    update(cursors, blockedZones) {
+      if (!GameState.overworldInputEnabled) return;
+
+      let newX = this.x;
+      let newY = this.y;
+
+      // Calculate intended movement
+      if (cursors.left.isDown) {
+        newX -= this.speed;
+        this.sprite.setFlipX(true); // Face left
+      } else if (cursors.right.isDown) {
+        newX += this.speed;
+        this.sprite.setFlipX(false); // Face right
+      }
+
+      if (cursors.up.isDown) {
+        newY -= this.speed;
+      } else if (cursors.down.isDown) {
+        newY += this.speed;
+      }
+
+      // Check collision with blocked zones
+      if (!this.wouldCollide(newX, newY, blockedZones)) {
+        this.x = newX;
+        this.y = newY;
+        this.sprite.setPosition(this.x, this.y);
+      }
+    }
+
+    wouldCollide(newX, newY, blockedZones) {
+      const hitbox = {
+        x: newX - this.hitboxWidth / 2,
+        y: newY - this.hitboxHeight / 2,
+        width: this.hitboxWidth,
+        height: this.hitboxHeight
+      };
+
+      for (const zone of blockedZones) {
+        if (this.rectanglesOverlap(hitbox, zone)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    rectanglesOverlap(rect1, rect2) {
+      return rect1.x < rect2.x + rect2.width &&
+             rect1.x + rect1.width > rect2.x &&
+             rect1.y < rect2.y + rect2.height &&
+             rect1.y + rect1.height > rect2.y;
+    }
+
+    getPosition() {
+      return { x: this.x, y: this.y };
+    }
+  }
+
+  // ===== MAIN GAME SCENE =====
+  class TropicalIslandScene extends Phaser.Scene {
+    constructor() {
+      super('TropicalIslandScene');
+      this.fishingMinigame = null;
+      this.collectionPanel = null;
+      this.debugPanel = null;
+
+      // Phase 2: Overworld elements
+      this.player = null;
+      this.npc = null;
+      this.cursors = null;
+      this.blockedZones = [];
+      this.interactableSpots = [];
+      this.currentInteractable = null;
+      this.interactionPrompt = null;
+      this.dialoguePanel = null;
+    }
+
+    preload() {
+      // Use relative paths - works locally AND on GitHub Pages
+      this.load.atlas('terrain', 'terrain_flora.png', 'terrain_flora.json');
+      this.load.atlas('fish', 'fish_characters.png', 'fish_characters.json');
+
+      // Progress bar feedback
+      const bar = document.getElementById('loading-progress');
+      const txt = document.getElementById('loading-text');
+      const info = document.getElementById('status-info');
+
+      this.load.on('progress', v => {
+        bar.style.width = `${v * 100}%`;
+        txt.textContent = `🏝️ Loading... ${Math.round(v * 100)}%`;
+        console.log(`Loading progress: ${Math.round(v * 100)}%`);
+      });
+
+      this.load.on('fileload', (_, __, ___, f) => {
+        const filename = f.url.split('/').pop();
+        info.textContent = `✅ Loaded: ${filename}`;
+        console.log(`✅ Successfully loaded: ${filename}`);
+      });
+
+      this.load.on('complete', () => {
+        info.textContent = '🎉 All assets loaded!';
+        console.log('🎉 All assets loaded successfully!');
+        setTimeout(() => document.getElementById('loading-overlay').style.display = 'none', 600);
+      });
+
+      this.load.on('loaderror', f => {
+        const filename = f.url.split('/').pop();
+        txt.textContent = '❌ Load error';
+        info.textContent = `Failed: ${filename}`;
+        info.style.color = '#ff6b6b';
+        console.error(`❌ Failed to load: ${filename}`, f.url);
+      });
+    }
+
+    create() {
+      console.log('🎮 Creating game scene...');
+
+      // Initialize game state
+      GameState.init();
+
+      // Verify atlases loaded
+      if (!this.textures.exists('terrain') || !this.textures.exists('fish')) {
+        console.error('❌ Atlases not loaded!');
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'ERROR: Failed to load assets', {
+          fontSize: '24px',
+          fill: '#ff0000'
+        }).setOrigin(0.5);
+        return;
+      }
+
+      // Sky background
+      this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, COLORS.SKY);
+
+      // Create island scenery
+      this.createIsland();
+
+      // Create animated water effects
+      this.createWaterEffects();
+
+      // Create swimming fish
+      this.createSwimmingFish();
+
+      // Phase 2: Setup blocked zones (collision)
+      this.setupBlockedZones();
+
+      // Phase 2: Create player character
+      this.player = new Player(this, 400, 300); // Start in center
+      GameState.player = this.player;
+
+      // Phase 2: Create NPC guide
+      this.createNPC();
+
+      // Phase 2: Setup interactable spots
+      this.setupInteractableSpots();
+
+      // Phase 2: Create interaction prompt
+      this.interactionPrompt = this.add.text(0, 0, '', {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        fill: '#fff',
+        stroke: '#000',
+        strokeThickness: 4,
+        backgroundColor: '#2E86AB',
+        padding: { x: 10, y: 5 }
+      }).setOrigin(0.5).setDepth(100).setVisible(false);
+
+      // Title
+      this.add.text(GAME_WIDTH / 2, 30, '🌴 MAXI\'S ISLAND FISHING 🌴', {
+        fontSize: '28px',
+        fontFamily: 'Arial',
+        fill: '#fff',
+        stroke: '#2E86AB',
+        strokeThickness: 6
+      }).setOrigin(0.5).setDepth(5);
+
+      // Instructions
+      const instructions = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 20,
+        'Arrow Keys: Move | Space: Interact | C: Collection | D: Debug', {
+        fontSize: '12px',
+        fill: '#fff',
+        stroke: '#2E86AB',
+        strokeThickness: 3
+      }).setOrigin(0.5).setDepth(5);
+
+      // Phase 2: Setup keyboard input
+      this.cursors = this.input.keyboard.createCursorKeys();
+      this.input.keyboard.on('keydown-SPACE', () => this.handleSpacePress());
+      this.input.keyboard.on('keydown-C', () => this.toggleCollectionPanel());
+      this.input.keyboard.on('keydown-D', () => this.toggleDebugPanel());
+
+      console.log('✅ Scene creation complete!');
+      console.log('📊 Collection stats:', GameState.fishCollection.getStats());
+    }
+
+    createIsland() {
+      // Sand island base
+      const sand = this.add.image(380, 340, 'terrain', 'sand_irregular').setScale(2.5);
+
+      // Palm trees
+      const palm1 = this.add.image(300, 260, 'terrain', 'palm_big')
+        .setScale(1.8)
+        .setOrigin(0.5, 1);
+      const palm2 = this.add.image(500, 280, 'terrain', 'palm_small')
+        .setScale(2.0)
+        .setOrigin(0.5, 1);
+
+      // Bushes
+      const bush = this.add.image(420, 320, 'terrain', 'bush_medium').setScale(1.8);
+
+      // Animate palms swaying
+      this.tweens.add({
+        targets: palm1,
+        rotation: 0.18,
+        duration: 4000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      this.tweens.add({
+        targets: palm2,
+        rotation: -0.15,
+        duration: 4500,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: 1500
+      });
+
+      console.log('✅ Island created');
+    }
+
+    createWaterEffects() {
+      // Waves at different depths
+      const wave1 = this.add.image(150, 480, 'terrain', 'wave_shallow')
+        .setScale(2)
+        .setAlpha(0.6);
+      const wave2 = this.add.image(600, 500, 'terrain', 'wave_shallow')
+        .setScale(2)
+        .setAlpha(0.6);
+
+      // Animate waves
+      this.tweens.add({
+        targets: [wave1, wave2],
+        x: '+=20',
+        duration: 3000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      console.log('✅ Water effects created');
+    }
+
+    createSwimmingFish() {
+      // Background fish swimming around
+      const fish1 = this.add.image(150, 200, 'fish', 'fish_blue').setScale(3.5);
+      const fish2 = this.add.image(650, 450, 'fish', 'fish_yellow').setScale(3.2);
+
+      // Animate fish swimming
+      this.tweens.add({
+        targets: fish1,
+        x: 250,
+        y: 170,
+        duration: 7000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      this.tweens.add({
+        targets: fish2,
+        x: 550,
+        y: 480,
+        duration: 8000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: 2000
+      });
+
+      console.log('✅ Swimming fish created');
+    }
+
+    // ===== PHASE 2: OVERWORLD METHODS =====
+
+    update() {
+      // Player movement
+      if (this.player && this.cursors) {
+        this.player.update(this.cursors, this.blockedZones);
+      }
+
+      // Check for nearby interactables
+      this.checkInteractions();
+    }
+
+    setupBlockedZones() {
+      // Define collision zones for palms, rocks, water edges
+      this.blockedZones = [
+        // Palms
+        { x: 280, y: 220, width: 40, height: 80 }, // Left palm
+        { x: 480, y: 240, width: 40, height: 80 }, // Right palm
+
+        // Water edges (prevent walking into ocean)
+        { x: 0, y: 0, width: 800, height: 100 }, // Top water
+        { x: 0, y: 500, width: 800, height: 100 }, // Bottom water
+        { x: 0, y: 0, width: 50, height: 600 }, // Left water
+        { x: 750, y: 0, width: 50, height: 600 }, // Right water
+
+        // Bush
+        { x: 400, y: 305, width: 40, height: 30 }
+      ];
+
+      console.log('✅ Blocked zones set up');
+    }
+
+    createNPC() {
+      // Place parent NPC near starting area
+      const npcX = 500;
+      const npcY = 200;
+
+      this.npc = this.add.image(npcX, npcY, 'fish', 'char_adult')
+        .setScale(2)
+        .setDepth(9);
+
+      console.log('✅ NPC created at', npcX, npcY);
+    }
+
+    setupInteractableSpots() {
+      // Define all interactable locations
+      this.interactableSpots = [
+        {
+          id: 'npc',
+          x: 500,
+          y: 200,
+          radius: 60,
+          prompt: '💬 Space',
+          onActivate: () => this.showDialogue()
+        },
+        {
+          id: 'fishing_dock',
+          x: 120,
+          y: 420,
+          radius: 70,
+          prompt: '🎣 Space',
+          sprite: this.add.image(120, 420, 'terrain', 'log_large')
+            .setScale(1.5)
+            .setAlpha(0.9)
+            .setDepth(8),
+          onActivate: () => this.startFishing()
+        },
+        {
+          id: 'tide_pool_counting',
+          x: 200,
+          y: 200,
+          radius: 60,
+          prompt: '🐚 Count!',
+          sprite: this.add.image(200, 200, 'terrain', 'rock_cluster')
+            .setScale(2)
+            .setDepth(8),
+          onActivate: () => this.startTidePoolCounting()
+        },
+        {
+          id: 'crab_race',
+          x: 650,
+          y: 450,
+          radius: 60,
+          prompt: '🦀 Race!',
+          sprite: this.add.image(650, 450, 'fish', 'crab_blue')
+            .setScale(4)
+            .setDepth(8),
+          onActivate: () => this.startCrabRace()
+        },
+        {
+          id: 'letter_spotter',
+          x: 650,
+          y: 200,
+          radius: 60,
+          prompt: '🐙 Letters!',
+          sprite: this.add.image(650, 200, 'fish', 'seahorse_green')
+            .setScale(5)
+            .setDepth(8),
+          onActivate: () => this.startLetterSpotter()
+        },
+        {
+          id: 'letter_pairs',
+          x: 200,
+          y: 450,
+          radius: 60,
+          prompt: '🎴 Match!',
+          sprite: this.add.image(200, 450, 'terrain', 'rock_small_1')
+            .setScale(2.5)
+            .setDepth(8),
+          onActivate: () => this.startLetterPairs()
+        },
+        {
+          id: 'beach_cleanup',
+          x: 400,
+          y: 480,
+          radius: 60,
+          prompt: '🏖️ Clean!',
+          sprite: this.add.image(400, 480, 'terrain', 'branch_1')
+            .setScale(2)
+            .setDepth(8),
+          onActivate: () => this.startBeachCleanup()
+        }
+      ];
+
+      console.log('✅ Interactable spots set up:', this.interactableSpots.length);
+    }
+
+    checkInteractions() {
+      if (!GameState.overworldInputEnabled || !this.player) return;
+
+      const playerPos = this.player.getPosition();
+      let closestSpot = null;
+      let closestDist = Infinity;
+
+      // Find closest interactable within range
+      for (const spot of this.interactableSpots) {
+        const dx = playerPos.x - spot.x;
+        const dy = playerPos.y - spot.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < spot.radius && dist < closestDist) {
+          closestDist = dist;
+          closestSpot = spot;
+        }
+      }
+
+      // Update prompt
+      if (closestSpot) {
+        this.currentInteractable = closestSpot;
+        this.interactionPrompt.setText(closestSpot.prompt);
+        this.interactionPrompt.setPosition(closestSpot.x, closestSpot.y - 50);
+        this.interactionPrompt.setVisible(true);
+      } else {
+        this.currentInteractable = null;
+        this.interactionPrompt.setVisible(false);
+      }
+    }
+
+    handleSpacePress() {
+      // Priority: dialogue/mini-game UI first, then interactions
+      if (GameState.isDialogueOpen) {
+        this.closeDialogue();
+        return;
+      }
+
+      if (GameState.isMinigameActive) {
+        // Space is handled by mini-game itself
+        return;
+      }
+
+      // Activate current interactable
+      if (this.currentInteractable && GameState.overworldInputEnabled) {
+        this.currentInteractable.onActivate();
+      }
+    }
+
+    // ===== NPC DIALOGUE =====
+
+    showDialogue() {
+      if (GameState.isDialogueOpen || GameState.isMinigameActive) return;
+
+      GameState.openDialogue();
+
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const container = this.add.container(0, 0).setDepth(150);
+      this.dialoguePanel = container;
+
+      // Semi-transparent overlay
+      const overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.6)
+        .setOrigin(0)
+        .setInteractive();
+      container.add(overlay);
+
+      // Dialogue box
+      const boxWidth = 600;
+      const boxHeight = 150;
+
+      const outerBorder = this.add.rectangle(centerX, centerY + 150, boxWidth + 20, boxHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      container.add(outerBorder);
+
+      const dialogueBox = this.add.rectangle(centerX, centerY + 150, boxWidth, boxHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      container.add(dialogueBox);
+
+      // Get dialogue based on progress
+      const fishStats = GameState.fishCollection.getStats();
+      const learnStats = GameState.learningProgress.getStats();
+
+      let message = 'Welcome to the island, Maxi!\n\nTry fishing or explore the learning spots!';
+
+      // Priority messages based on progress
+      if (learnStats.uniqueLetters >= 10) {
+        message = `Wow! You've found ${learnStats.uniqueLetters} different letters!\n\nYou're doing amazing!`;
+      } else if (learnStats.countingGamesPlayed >= 3) {
+        message = `You've practiced counting ${learnStats.countingGamesPlayed} times!\n\nKeep up the great work!`;
+      } else if (learnStats.crabQuestionsCorrect >= 5) {
+        message = `You got ${learnStats.crabQuestionsCorrect} math questions right!\n\nYou're so smart!`;
+      } else if (fishStats.caught >= 5) {
+        message = `Great job! You've caught ${fishStats.caught} different fish!\n\nTry the learning games too!`;
+      } else if (fishStats.caught > 0 || learnStats.countingGamesPlayed > 0) {
+        message = `You're doing great!\n\nThere's so much to explore and learn!`;
+      }
+
+      const dialogueText = this.add.text(centerX, centerY + 140, message, {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        align: 'center',
+        wordWrap: { width: boxWidth - 40 }
+      }).setOrigin(0.5);
+      container.add(dialogueText);
+
+      const continueText = this.add.text(centerX, centerY + 210, 'Press SPACE to continue', {
+        fontSize: '14px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'italic'
+      }).setOrigin(0.5);
+      container.add(continueText);
+    }
+
+    closeDialogue() {
+      if (this.dialoguePanel) {
+        this.dialoguePanel.destroy();
+        this.dialoguePanel = null;
+      }
+      GameState.enableOverworld();
+    }
+
+    // ===== FISHING (INTEGRATED WITH OVERWORLD) =====
+
+    startFishing() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      console.log('🎣 Starting fishing mini-game...');
+      this.fishingMinigame = new FishingMinigame(this, this.onFishingComplete.bind(this));
+    }
+
+    onFishingComplete(success, caughtFish) {
+      this.fishingMinigame = null;
+
+      if (success && caughtFish) {
+        console.log(`🎉 Caught a ${caughtFish.displayName}!`);
+
+        // Add to collection
+        const wasNew = GameState.fishCollection.catchFish(caughtFish.id);
+
+        // Show "New Fish!" popup if first time
+        if (wasNew) {
+          this.showNewFishPopup(caughtFish);
+        } else {
+          // Re-enable overworld immediately if not showing new fish popup
+          GameState.enableOverworld();
+        }
+      } else {
+        console.log('😢 The fish got away...');
+        GameState.enableOverworld();
+      }
+    }
+
+    // ===== EDUCATIONAL MINI-GAME LAUNCHERS (PHASE 3) =====
+
+    startTidePoolCounting() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new TidePoolCountingGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    startCrabRace() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new CrabNumberRaceGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    startLetterSpotter() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new LetterSpotterGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    startLetterPairs() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new LetterPairsMatchGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    startBeachCleanup() {
+      if (GameState.isMinigameActive) return;
+
+      GameState.startMinigame();
+      new BeachCleanupGame(this, () => {
+        GameState.enableOverworld();
+      });
+    }
+
+    showNewFishPopup(fish) {
+      // Create a temporary popup for new fish discovery
+      const container = this.add.container(0, 0).setDepth(200);
+
+      const overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0);
+      container.add(overlay);
+
+      const panelWidth = 400;
+      const panelHeight = 300;
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // GameBoy style panel
+      const outerBorder = this.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      container.add(outerBorder);
+
+      const panel = this.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      container.add(panel);
+
+      // "NEW!" text
+      const newText = this.add.text(centerX, centerY - 110, '🎉 NEW FISH! 🎉', {
+        fontSize: '28px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(newText);
+
+      // Fish sprite
+      const fishSprite = this.add.image(centerX, centerY - 20, 'fish', fish.id)
+        .setScale(6);
+      container.add(fishSprite);
+
+      // Fish name
+      const nameText = this.add.text(centerX, centerY + 60, fish.displayName, {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(nameText);
+
+      // Rarity
+      const rarityText = this.add.text(centerX, centerY + 90, `[${fish.rarity}]`, {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'italic'
+      }).setOrigin(0.5);
+      container.add(rarityText);
+
+      // Continue prompt
+      const continueText = this.add.text(centerX, centerY + 120, 'Press SPACE to continue', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      container.add(continueText);
+
+      // Pulse animation
+      this.tweens.add({
+        targets: fishSprite,
+        scale: 7,
+        duration: 500,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      // Close on space or click
+      const closePopup = () => {
+        this.input.keyboard.off('keydown-SPACE', closePopup);
+        this.input.off('pointerdown', closePopup);
+        container.destroy();
+        GameState.enableOverworld(); // Re-enable movement after popup
+      };
+
+      this.input.keyboard.once('keydown-SPACE', closePopup);
+      this.input.once('pointerdown', closePopup);
+    }
+
+    toggleCollectionPanel() {
+      if (this.collectionPanel) {
+        // Close panel
+        this.collectionPanel.destroy();
+        this.collectionPanel = null;
+        GameState.enableOverworld();
+      } else {
+        // Open panel
+        GameState.disableOverworld();
+        this.showCollectionPanel();
+      }
+    }
+
+    exportProgress() {
+      // Gather all progress data
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        childName: 'Maxi', // Could be customizable in future
+        fishCollection: GameState.fishCollection.collection,
+        fishStats: GameState.fishCollection.getStats(),
+        learningProgress: GameState.learningProgress.data,
+        version: '1.0'
+      };
+
+      // Create downloadable JSON file
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+
+      // Create temporary download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `maxi-island-progress-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Show confirmation
+      const confirmText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'Progress Exported!', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#32CD32',
+        fontStyle: 'bold',
+        backgroundColor: '#000000',
+        padding: { x: 20, y: 10 }
+      }).setOrigin(0.5).setDepth(200);
+
+      this.time.delayedCall(2000, () => confirmText.destroy());
+    }
+
+    showCollectionPanel() {
+      const container = this.add.container(0, 0).setDepth(150);
+      this.collectionPanel = container;
+
+      // Overlay
+      const overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0)
+        .setInteractive(); // Block clicks to game behind
+      container.add(overlay);
+
+      const panelWidth = 700;
+      const panelHeight = 500;
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // GameBoy style panel
+      const outerBorder = this.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      container.add(outerBorder);
+
+      const panel = this.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      container.add(panel);
+
+      // Title
+      const title = this.add.text(centerX, centerY - 220, '🐟 FISH COLLECTION 🐟', {
+        fontSize: '28px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(title);
+
+      // Stats
+      const stats = GameState.fishCollection.getStats();
+      const statsText = this.add.text(centerX, centerY - 185,
+        `Caught: ${stats.caught}/${stats.total} | Total Catches: ${stats.totalCatches}`, {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      container.add(statsText);
+
+      // Fish grid
+      const allFish = GameState.fishCollection.getAllFish();
+      const startX = centerX - 320;
+      const startY = centerY - 150;
+      const cols = 4;
+      const cellWidth = 160;
+      const cellHeight = 90;
+
+      allFish.forEach((fish, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        const x = startX + col * cellWidth;
+        const y = startY + row * cellHeight;
+
+        // Background for each cell
+        const cellBg = this.add.rectangle(x, y, cellWidth - 10, cellHeight - 10, 0x8BAC0F, 0.5)
+          .setStrokeStyle(2, 0x0F380F);
+        container.add(cellBg);
+
+        if (fish.caught) {
+          // Show fish sprite
+          const sprite = this.add.image(x - 50, y, 'fish', fish.id).setScale(3);
+          container.add(sprite);
+
+          // Name
+          const name = this.add.text(x + 10, y - 15, fish.displayName, {
+            fontSize: '12px',
+            fontFamily: 'Arial',
+            fill: '#0F380F',
+            fontStyle: 'bold',
+            wordWrap: { width: 90 }
+          }).setOrigin(0, 0.5);
+          container.add(name);
+
+          // Rarity and count
+          const info = this.add.text(x + 10, y + 10, `${fish.rarity}\nx${fish.count}`, {
+            fontSize: '10px',
+            fontFamily: 'Arial',
+            fill: '#0F380F'
+          }).setOrigin(0, 0.5);
+          container.add(info);
+        } else {
+          // Show silhouette/unknown
+          const unknown = this.add.text(x, y, '???', {
+            fontSize: '32px',
+            fontFamily: 'Arial',
+            fill: '#0F380F',
+            alpha: 0.3
+          }).setOrigin(0.5);
+          container.add(unknown);
+        }
+      });
+
+      // Export button (for parents/teachers)
+      const exportBtn = this.add.rectangle(centerX - 110, centerY + 210, 180, 40, 0x0F380F)
+        .setInteractive({ useHandCursor: true });
+      container.add(exportBtn);
+
+      const exportBtnText = this.add.text(centerX - 110, centerY + 210, 'EXPORT', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(exportBtnText);
+
+      exportBtn.on('pointerover', () => exportBtn.setFillStyle(0x8BAC0F));
+      exportBtn.on('pointerout', () => exportBtn.setFillStyle(0x0F380F));
+      exportBtn.on('pointerdown', () => this.exportProgress());
+
+      // Close button
+      const closeBtn = this.add.rectangle(centerX + 110, centerY + 210, 180, 40, 0x0F380F)
+        .setInteractive({ useHandCursor: true });
+      container.add(closeBtn);
+
+      const closeBtnText = this.add.text(centerX + 110, centerY + 210, 'CLOSE (C)', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(closeBtnText);
+
+      closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x8BAC0F));
+      closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x0F380F));
+      closeBtn.on('pointerdown', () => this.toggleCollectionPanel());
+    }
+
+    toggleDebugPanel() {
+      if (this.debugPanel) {
+        this.debugPanel.destroy();
+        this.debugPanel = null;
+        GameState.enableOverworld();
+      } else {
+        GameState.disableOverworld();
+        this.showDebugPanel();
+      }
+    }
+
+    showDebugPanel() {
+      const container = this.add.container(0, 0).setDepth(200);
+      this.debugPanel = container;
+
+      // Overlay
+      const overlay = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.9)
+        .setOrigin(0)
+        .setInteractive();
+      container.add(overlay);
+
+      // Title
+      const title = this.add.text(GAME_WIDTH / 2, 30, 'SPRITE ATLAS DEBUGGER (Press D to close)', {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        fill: '#ffffff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      container.add(title);
+
+      // Show terrain atlas
+      this.addAtlasPreview(container, 'terrain', 50, 60);
+
+      // Show fish atlas
+      this.addAtlasPreview(container, 'fish', 430, 60);
+
+      // Instructions
+      const instructions = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 20,
+        'Check if sprites are cut off or misaligned', {
+        fontSize: '14px',
+        fontFamily: 'Arial',
+        fill: '#ffff00'
+      }).setOrigin(0.5);
+      container.add(instructions);
+    }
+
+    addAtlasPreview(container, atlasKey, startX, startY) {
+      const atlas = this.textures.get(atlasKey);
+      const frames = atlas.getFrameNames();
+
+      // Header
+      const header = this.add.text(startX, startY, `${atlasKey.toUpperCase()} (${frames.length} frames)`, {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#00ff00',
+        fontStyle: 'bold'
+      });
+      container.add(header);
+
+      // Grid of sprites
+      const cols = 5;
+      const cellSize = 60;
+      let y = startY + 30;
+
+      frames.forEach((frameName, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        const x = startX + col * cellSize;
+        const cellY = y + row * (cellSize + 15);
+
+        // Background
+        const bg = this.add.rectangle(x + cellSize/2, cellY + cellSize/2, cellSize - 2, cellSize - 2, 0x333333)
+          .setStrokeStyle(1, 0x666666);
+        container.add(bg);
+
+        // Sprite
+        try {
+          const sprite = this.add.image(x + cellSize/2, cellY + cellSize/2, atlasKey, frameName);
+
+          // Scale to fit
+          const scale = Math.min((cellSize - 10) / sprite.width, (cellSize - 10) / sprite.height);
+          sprite.setScale(scale);
+
+          container.add(sprite);
+        } catch (e) {
+          // If sprite fails, show error
+          const error = this.add.text(x + cellSize/2, cellY + cellSize/2, 'X', {
+            fontSize: '20px',
+            fill: '#ff0000'
+          }).setOrigin(0.5);
+          container.add(error);
+        }
+
+        // Label
+        const label = this.add.text(x + cellSize/2, cellY + cellSize + 5, frameName, {
+          fontSize: '8px',
+          fontFamily: 'Arial',
+          fill: '#ffffff',
+          wordWrap: { width: cellSize }
+        }).setOrigin(0.5, 0);
+        container.add(label);
+      });
+    }
+  }
+
+  // ===== EDUCATIONAL MINI-GAMES (PHASE 3) =====
+
+  // ===== 1. TIDE POOL COUNTING GAME =====
+  class TidePoolCountingGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.targetColor = null;
+      this.targetCount = 0;
+      this.selectedAnswer = -1;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 600;
+      const panelHeight = 450;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 200, '🐚 TIDE POOL COUNTING', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Choose random target
+      const fishColors = [
+        {key: 'fish_red', name: 'red'},
+        {key: 'fish_blue', name: 'blue'},
+        {key: 'fish_yellow', name: 'yellow'},
+        {key: 'fish_green', name: 'green'}
+      ];
+      this.targetColor = Phaser.Utils.Array.GetRandom(fishColors);
+      this.targetCount = Phaser.Math.Between(3, 8);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 160,
+        `Count the ${this.targetColor.name} fish!`, {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Spawn fish
+      this.spawnFish();
+
+      // Wait 3 seconds, then show answer choices
+      this.scene.time.delayedCall(3000, () => this.showChoices());
+    }
+
+    spawnFish() {
+      const fishArea = {
+        x: GAME_WIDTH / 2 - 250,
+        y: GAME_HEIGHT / 2 - 80,
+        width: 500,
+        height: 120
+      };
+
+      // Spawn target fish
+      for (let i = 0; i < this.targetCount; i++) {
+        const x = fishArea.x + Math.random() * fishArea.width;
+        const y = fishArea.y + Math.random() * fishArea.height;
+        const fish = this.scene.add.image(x, y, 'fish', this.targetColor.key).setScale(3);
+        this.container.add(fish);
+      }
+
+      // Spawn 2-4 distractor fish
+      const distractorCount = Phaser.Math.Between(2, 4);
+      const otherColors = ['fish_orange', 'fish_purple', 'fish_gray'];
+
+      for (let i = 0; i < distractorCount; i++) {
+        const x = fishArea.x + Math.random() * fishArea.width;
+        const y = fishArea.y + Math.random() * fishArea.height;
+        const colorKey = Phaser.Utils.Array.GetRandom(otherColors);
+        const fish = this.scene.add.image(x, y, 'fish', colorKey).setScale(3);
+        this.container.add(fish);
+      }
+    }
+
+    showChoices() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Generate 3 answer choices (one correct, two wrong)
+      const answers = [this.targetCount];
+      while (answers.length < 3) {
+        const wrong = this.targetCount + Phaser.Math.Between(-3, 3);
+        if (wrong > 0 && wrong !== this.targetCount && !answers.includes(wrong)) {
+          answers.push(wrong);
+        }
+      }
+      Phaser.Utils.Array.Shuffle(answers);
+
+      const questionText = this.scene.add.text(centerX, centerY + 60,
+        'How many?', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(questionText);
+
+      // Create answer buttons
+      const startX = centerX - 150;
+      const y = centerY + 110;
+
+      answers.forEach((num, idx) => {
+        const x = startX + idx * 150;
+
+        // Shell background
+        const button = this.scene.add.rectangle(x, y, 80, 80, 0x8BAC0F)
+          .setStrokeStyle(3, 0x0F380F)
+          .setInteractive({ useHandCursor: true });
+        this.container.add(button);
+
+        const text = this.scene.add.text(x, y, num.toString(), {
+          fontSize: '36px',
+          fontFamily: 'Arial',
+          fill: '#0F380F',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(text);
+
+        button.on('pointerover', () => button.setFillStyle(0xFFFFFF, 0.3));
+        button.on('pointerout', () => button.setFillStyle(0x8BAC0F));
+        button.on('pointerdown', () => this.selectAnswer(num, num === this.targetCount));
+      });
+    }
+
+    selectAnswer(selected, isCorrect) {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Record progress
+      GameState.learningProgress.recordCountingGame(isCorrect);
+
+      const feedbackText = this.scene.add.text(centerX, centerY + 170,
+        isCorrect ?
+          `✅ Great job! There are ${this.targetCount} ${this.targetColor.name} fish!` :
+          `Try again next time! There were ${this.targetCount} ${this.targetColor.name} fish.`, {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: isCorrect ? '#0F380F' : '#8B4513',
+        fontStyle: 'bold',
+        align: 'center'
+      }).setOrigin(0.5);
+      this.container.add(feedbackText);
+
+      this.scene.time.delayedCall(2500, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 2. CRAB NUMBER RACE GAME =====
+  class CrabNumberRaceGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.crabSprite = null;
+      this.currentQuestion = 0;
+      this.totalQuestions = 4;
+      this.correctCount = 0;
+      this.crabPosition = 0;
+
+      // Question bank
+      this.questions = this.generateQuestions();
+
+      this.create();
+    }
+
+    generateQuestions() {
+      const questions = [];
+
+      for (let i = 0; i < this.totalQuestions; i++) {
+        if (Math.random() < 0.5) {
+          // Comparison question
+          const num1 = Phaser.Math.Between(1, 15);
+          const num2 = Phaser.Math.Between(1, 15);
+          questions.push({
+            type: 'compare',
+            text: `Which is bigger: ${num1} or ${num2}?`,
+            correct: Math.max(num1, num2),
+            choices: [num1, num2, Math.min(num1, num2) - 1].filter(n => n > 0)
+          });
+        } else {
+          // Addition question
+          const num1 = Phaser.Math.Between(1, 5);
+          const num2 = Phaser.Math.Between(1, 5);
+          const sum = num1 + num2;
+          questions.push({
+            type: 'addition',
+            text: `${num1} + ${num2} = ?`,
+            correct: sum,
+            choices: [sum, sum + 1, sum - 1].filter(n => n > 0)
+          });
+        }
+      }
+
+      return questions;
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 600;
+      const panelHeight = 400;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 170, '🦀 CRAB NUMBER RACE', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Race track
+      const trackWidth = 400;
+      const track = this.scene.add.rectangle(centerX, centerY - 100, trackWidth, 40, 0x8BAC0F)
+        .setStrokeStyle(3, 0x0F380F);
+      this.container.add(track);
+
+      // Start and finish markers
+      const startText = this.scene.add.text(centerX - 195, centerY - 100, 'START', {
+        fontSize: '12px',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(startText);
+
+      const finishText = this.scene.add.text(centerX + 195, centerY - 100, '🏁', {
+        fontSize: '16px'
+      }).setOrigin(0.5);
+      this.container.add(finishText);
+
+      // Crab sprite
+      this.crabSprite = this.scene.add.image(centerX - 180, centerY - 100, 'fish', 'crab_blue')
+        .setScale(3);
+      this.container.add(this.crabSprite);
+
+      // Show first question
+      this.showQuestion();
+    }
+
+    showQuestion() {
+      if (this.currentQuestion >= this.totalQuestions) {
+        this.showWin();
+        return;
+      }
+
+      const question = this.questions[this.currentQuestion];
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Question text
+      const questionText = this.scene.add.text(centerX, centerY - 30, question.text, {
+        fontSize: '22px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(questionText);
+
+      // Answer choices
+      const startX = centerX - 120;
+      const y = centerY + 40;
+
+      Phaser.Utils.Array.Shuffle(question.choices);
+
+      question.choices.forEach((num, idx) => {
+        const x = startX + idx * 120;
+
+        const button = this.scene.add.rectangle(x, y, 80, 80, 0x8BAC0F)
+          .setStrokeStyle(3, 0x0F380F)
+          .setInteractive({ useHandCursor: true });
+        this.container.add(button);
+
+        const text = this.scene.add.text(x, y, num.toString(), {
+          fontSize: '32px',
+          fontFamily: 'Arial',
+          fill: '#0F380F',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(text);
+
+        button.on('pointerover', () => button.setFillStyle(0xFFFFFF, 0.3));
+        button.on('pointerout', () => button.setFillStyle(0x8BAC0F));
+        button.on('pointerdown', () => {
+          this.answerQuestion(num === question.correct, button);
+        });
+      });
+    }
+
+    answerQuestion(isCorrect, button) {
+      // Record progress
+      GameState.learningProgress.recordCrabQuestion(isCorrect);
+
+      if (isCorrect) {
+        this.correctCount++;
+        // Move crab forward
+        this.crabPosition += 90;
+        this.scene.tweens.add({
+          targets: this.crabSprite,
+          x: this.crabSprite.x + 90,
+          duration: 500,
+          ease: 'Power2'
+        });
+      } else {
+        // Shake crab
+        this.scene.tweens.add({
+          targets: this.crabSprite,
+          x: this.crabSprite.x + 5,
+          duration: 50,
+          yoyo: true,
+          repeat: 3
+        });
+      }
+
+      // Clear current question UI
+      this.scene.time.delayedCall(800, () => {
+        this.currentQuestion++;
+        // Clear old question elements (they'll be replaced)
+        this.showQuestion();
+      });
+    }
+
+    showWin() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const winText = this.scene.add.text(centerX, centerY + 100,
+        `🎉 You won! You got ${this.correctCount} out of ${this.totalQuestions} correct!`, {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold',
+        align: 'center'
+      }).setOrigin(0.5);
+      this.container.add(winText);
+
+      this.scene.time.delayedCall(3000, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 3. LETTER SPOTTER GAME =====
+  class LetterSpotterGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.targetLetter = null;
+      this.successCount = 0;
+      this.targetZone = null;
+      this.creatures = [];
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 650;
+      const panelHeight = 450;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Pick random target letter
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      this.targetLetter = Phaser.Utils.Array.GetRandom(letters);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 200, `🐙 Catch the letter ${this.targetLetter}!`, {
+        fontSize: '28px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 160,
+        'Press SPACE when the letter is in the green zone!', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Target zone
+      this.targetZone = this.scene.add.rectangle(centerX, centerY - 50, 150, 180, COLORS.GREEN, 0.3)
+        .setStrokeStyle(4, COLORS.GREEN);
+      this.container.add(this.targetZone);
+
+      // Status text
+      this.statusText = this.scene.add.text(centerX, centerY + 150, `Found: ${this.successCount} / 3`, {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(this.statusText);
+
+      // Spawn creatures
+      this.spawnCreatures();
+
+      // Handle space key
+      this.spaceKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+      this.spaceKey.on('down', () => this.checkZone());
+    }
+
+    spawnCreatures() {
+      const creatureTypes = ['seahorse_green', 'seahorse_yellow', 'octopus_orange', 'octopus_pink', 'fish_mini1', 'fish_mini2'];
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+      for (let i = 0; i < 8; i++) {
+        const delay = i * 2000;
+
+        this.scene.time.delayedCall(delay, () => {
+          const y = GAME_HEIGHT / 2 - 50 + Phaser.Math.Between(-60, 60);
+          const creatureType = Phaser.Utils.Array.GetRandom(creatureTypes);
+
+          // Random letter (higher chance for target)
+          const letter = Math.random() < 0.35 ? this.targetLetter : Phaser.Utils.Array.GetRandom(letters);
+
+          this.spawnCreature(y, creatureType, letter);
+        });
+      }
+
+      // Auto-close after all creatures pass
+      this.scene.time.delayedCall(18000, () => this.close());
+    }
+
+    spawnCreature(y, creatureType, letter) {
+      const creature = this.scene.add.image(-50, y, 'fish', creatureType).setScale(4);
+      this.container.add(creature);
+
+      const letterText = this.scene.add.text(-50, y - 40, letter, {
+        fontSize: '32px',
+        fontFamily: 'Arial',
+        fill: '#FFFFFF',
+        stroke: '#000000',
+        strokeThickness: 4,
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(letterText);
+
+      const creatureData = { creature, letterText, letter, active: true };
+      this.creatures.push(creatureData);
+
+      // Animate across screen
+      this.scene.tweens.add({
+        targets: [creature, letterText],
+        x: GAME_WIDTH + 50,
+        duration: 6000,
+        ease: 'Linear',
+        onComplete: () => {
+          creatureData.active = false;
+        }
+      });
+    }
+
+    checkZone() {
+      const zoneLeft = this.targetZone.x - this.targetZone.width / 2;
+      const zoneRight = this.targetZone.x + this.targetZone.width / 2;
+
+      for (const creatureData of this.creatures) {
+        if (!creatureData.active) continue;
+
+        const creatureX = creatureData.creature.x;
+        if (creatureX >= zoneLeft && creatureX <= zoneRight) {
+          if (creatureData.letter === this.targetLetter) {
+            // Success!
+            this.successCount++;
+            this.statusText.setText(`Found: ${this.successCount} / 3`);
+
+            // Record progress
+            GameState.learningProgress.recordLetterFound(this.targetLetter);
+
+            // Flash effect
+            this.scene.tweens.add({
+              targets: [creatureData.creature, creatureData.letterText],
+              alpha: 0,
+              scale: 6,
+              duration: 300
+            });
+
+            creatureData.active = false;
+
+            if (this.successCount >= 3) {
+              this.scene.time.delayedCall(1000, () => this.showSuccess());
+            }
+          } else {
+            // Wrong letter - gentle feedback
+            this.scene.tweens.add({
+              targets: this.targetZone,
+              fillAlpha: 0.6,
+              duration: 100,
+              yoyo: true
+            });
+          }
+          break;
+        }
+      }
+    }
+
+    showSuccess() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const successText = this.scene.add.text(centerX, centerY + 180,
+        `🎉 You found all the ${this.targetLetter}'s!`, {
+        fontSize: '22px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(successText);
+
+      this.scene.time.delayedCall(2000, () => this.close());
+    }
+
+    close() {
+      if (this.spaceKey) {
+        this.spaceKey.off('down');
+      }
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 4. LETTER PAIRS MATCH GAME =====
+  class LetterPairsMatchGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.cards = [];
+      this.flippedCards = [];
+      this.matchedPairs = 0;
+      this.totalPairs = 6;
+      this.canFlip = true;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 650;
+      const panelHeight = 500;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 220, '🎴 LETTER PAIRS MATCH', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 185,
+        'Match uppercase and lowercase letters!', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Generate pairs
+      this.generateCards();
+    }
+
+    generateCards() {
+      // Pick 6 random letters
+      const allLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      const selectedLetters = [];
+
+      for (let i = 0; i < this.totalPairs; i++) {
+        const letter = Phaser.Utils.Array.GetRandom(allLetters);
+        selectedLetters.push({ upper: letter, lower: letter.toLowerCase() });
+        allLetters.splice(allLetters.indexOf(letter), 1);
+      }
+
+      // Create card data
+      const cardData = [];
+      selectedLetters.forEach(pair => {
+        cardData.push({ letter: pair.upper, pairId: pair.upper });
+        cardData.push({ letter: pair.lower, pairId: pair.upper });
+      });
+
+      // Shuffle
+      Phaser.Utils.Array.Shuffle(cardData);
+
+      // Create card grid (3 x 4)
+      const cols = 4;
+      const rows = 3;
+      const cardWidth = 90;
+      const cardHeight = 110;
+      const startX = GAME_WIDTH / 2 - (cols * cardWidth) / 2 + cardWidth / 2;
+      const startY = GAME_HEIGHT / 2 - (rows * cardHeight) / 2 + cardHeight / 2 + 20;
+
+      cardData.forEach((data, idx) => {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const x = startX + col * cardWidth;
+        const y = startY + row * cardHeight;
+
+        this.createCard(x, y, data);
+      });
+    }
+
+    createCard(x, y, data) {
+      // Card back (face-down)
+      const cardBack = this.scene.add.rectangle(x, y, 75, 95, 0x4682B4)
+        .setStrokeStyle(3, 0x0F380F)
+        .setInteractive({ useHandCursor: true });
+
+      // Card front (face-up) - hidden initially
+      const cardFront = this.scene.add.rectangle(x, y, 75, 95, 0xFFFFFF)
+        .setStrokeStyle(3, 0x0F380F)
+        .setVisible(false);
+
+      const letterText = this.scene.add.text(x, y, data.letter, {
+        fontSize: '48px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5).setVisible(false);
+
+      this.container.add(cardBack);
+      this.container.add(cardFront);
+      this.container.add(letterText);
+
+      const card = {
+        data,
+        cardBack,
+        cardFront,
+        letterText,
+        isFlipped: false,
+        isMatched: false
+      };
+
+      this.cards.push(card);
+
+      cardBack.on('pointerdown', () => this.flipCard(card));
+    }
+
+    flipCard(card) {
+      if (!this.canFlip || card.isFlipped || card.isMatched || this.flippedCards.length >= 2) return;
+
+      // Flip animation
+      card.isFlipped = true;
+      card.cardBack.setVisible(false);
+      card.cardFront.setVisible(true);
+      card.letterText.setVisible(true);
+
+      this.flippedCards.push(card);
+
+      if (this.flippedCards.length === 2) {
+        this.canFlip = false;
+        this.scene.time.delayedCall(800, () => this.checkMatch());
+      }
+    }
+
+    checkMatch() {
+      const [card1, card2] = this.flippedCards;
+
+      if (card1.data.pairId === card2.data.pairId) {
+        // Match!
+        card1.isMatched = true;
+        card2.isMatched = true;
+
+        // Highlight matched cards
+        card1.cardFront.setFillStyle(0x90EE90);
+        card2.cardFront.setFillStyle(0x90EE90);
+
+        this.matchedPairs++;
+
+        if (this.matchedPairs === this.totalPairs) {
+          // Record progress
+          GameState.learningProgress.recordLetterPairs();
+          this.scene.time.delayedCall(1000, () => this.showSuccess());
+        }
+      } else {
+        // No match - flip back
+        card1.isFlipped = false;
+        card2.isFlipped = false;
+        card1.cardBack.setVisible(true);
+        card2.cardBack.setVisible(false);
+        card1.cardFront.setVisible(false);
+        card2.cardFront.setVisible(false);
+        card1.letterText.setVisible(false);
+        card2.letterText.setVisible(false);
+      }
+
+      this.flippedCards = [];
+      this.canFlip = true;
+    }
+
+    showSuccess() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const successText = this.scene.add.text(centerX, centerY + 220,
+        '🎉 All matched!', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(successText);
+
+      this.scene.time.delayedCall(2000, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== 5. BEACH CLEANUP (NUMBER SEQUENCES) GAME =====
+  class BeachCleanupGame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.currentRound = 0;
+      this.totalRounds = 3;
+      this.correctCount = 0;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      this.container = this.scene.add.container(0, 0).setDepth(150);
+
+      // Overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.8)
+        .setOrigin(0).setInteractive();
+      this.container.add(overlay);
+
+      // Panel
+      const panelWidth = 600;
+      const panelHeight = 450;
+
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, panelWidth + 20, panelHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      const panel = this.scene.add.rectangle(centerX, centerY, panelWidth, panelHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(panel);
+
+      // Title
+      const title = this.scene.add.text(centerX, centerY - 190, '🏖️ BEACH CLEAN-UP', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions
+      const instructions = this.scene.add.text(centerX, centerY - 155,
+        'Fill in the missing number!', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(instructions);
+
+      // Start first round
+      this.showRound();
+    }
+
+    showRound() {
+      if (this.currentRound >= this.totalRounds) {
+        this.showComplete();
+        return;
+      }
+
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Generate sequence
+      const step = Math.random() < 0.7 ? 1 : 2;
+      const start = Phaser.Math.Between(5, 25);
+      const sequence = [start, start + step, start + step * 2];
+
+      // Pick which position is missing (0, 1, or 2)
+      const missingIdx = Phaser.Math.Between(0, 2);
+      const correctAnswer = sequence[missingIdx];
+      sequence[missingIdx] = '?';
+
+      // Display sequence
+      const sequenceText = this.scene.add.text(centerX, centerY - 80,
+        sequence.join('   '), {
+        fontSize: '48px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold',
+        letterSpacing: 10
+      }).setOrigin(0.5);
+      this.container.add(sequenceText);
+
+      // Generate answer choices
+      const wrongAnswers = [correctAnswer + step, correctAnswer - step, correctAnswer + 1]
+        .filter(n => n > 0 && n !== correctAnswer);
+      const choices = [correctAnswer, ...wrongAnswers.slice(0, 2)];
+      Phaser.Utils.Array.Shuffle(choices);
+
+      // Display choice buttons
+      const startX = centerX - 150;
+      const y = centerY + 40;
+
+      choices.forEach((num, idx) => {
+        const x = startX + idx * 150;
+
+        // Driftwood/branch board
+        const button = this.scene.add.rectangle(x, y, 100, 80, 0x8B4513)
+          .setStrokeStyle(3, 0x654321)
+          .setInteractive({ useHandCursor: true });
+        this.container.add(button);
+
+        const text = this.scene.add.text(x, y, num.toString(), {
+          fontSize: '36px',
+          fontFamily: 'Arial',
+          fill: '#F5DEB3',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(text);
+
+        button.on('pointerover', () => button.setFillStyle(0xA0522D));
+        button.on('pointerout', () => button.setFillStyle(0x8B4513));
+        button.on('pointerdown', () => {
+          this.selectAnswer(num, correctAnswer, num === correctAnswer, sequenceText, button);
+        });
+      });
+    }
+
+    selectAnswer(selected, correct, isCorrect, sequenceText, button) {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      if (isCorrect) {
+        this.correctCount++;
+
+        // Update sequence to show correct answer
+        sequenceText.setText(sequenceText.text.replace('?', correct.toString()));
+        sequenceText.setFill('#228B22');
+
+        // Animate button sliding into place
+        this.scene.tweens.add({
+          targets: button,
+          y: centerY - 80,
+          duration: 500,
+          ease: 'Power2'
+        });
+
+        const feedback = this.scene.add.text(centerX, centerY + 140,
+          `✅ Perfect! ${correct} goes there!`, {
+          fontSize: '20px',
+          fontFamily: 'Arial',
+          fill: '#0F380F',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.container.add(feedback);
+
+        // Record progress
+        GameState.learningProgress.recordSequence(true);
+
+        this.scene.time.delayedCall(2000, () => {
+          this.currentRound++;
+          // Clear round elements
+          this.showRound();
+        });
+      } else {
+        // Wrong answer - shake
+        this.scene.tweens.add({
+          targets: button,
+          x: button.x + 5,
+          duration: 50,
+          yoyo: true,
+          repeat: 3
+        });
+
+        const feedback = this.scene.add.text(centerX, centerY + 140,
+          `Try again! The answer is ${correct}`, {
+          fontSize: '18px',
+          fontFamily: 'Arial',
+          fill: '#8B4513'
+        }).setOrigin(0.5);
+        this.container.add(feedback);
+
+        // Record progress
+        GameState.learningProgress.recordSequence(false);
+
+        this.scene.time.delayedCall(2500, () => {
+          this.currentRound++;
+          this.showRound();
+        });
+      }
+    }
+
+    showComplete() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      const completeText = this.scene.add.text(centerX, centerY,
+        `🎉 Beach cleaned!\nYou got ${this.correctCount} out of ${this.totalRounds} correct!`, {
+        fontSize: '22px',
+        fontFamily: 'Arial',
+        fill: '#0F380F',
+        fontStyle: 'bold',
+        align: 'center'
+      }).setOrigin(0.5);
+      this.container.add(completeText);
+
+      this.scene.time.delayedCall(3000, () => this.close());
+    }
+
+    close() {
+      this.container.destroy();
+      this.onComplete();
+    }
+  }
+
+  // ===== FISHING MINI-GAME =====
+  class FishingMinigame {
+    constructor(scene, onComplete) {
+      this.scene = scene;
+      this.onComplete = onComplete;
+      this.container = null;
+      this.state = 'waiting'; // waiting, hooking, reeling, success, fail
+      this.hookTimer = null;
+      this.targetArrow = null;
+      this.playerArrow = null;
+      this.targetPosition = 0;
+      this.playerPosition = 0;
+      this.reelingTime = 0;
+      this.maxReelingTime = 3000; // 3 seconds to reel in
+      this.selectedFish = null;
+
+      this.create();
+    }
+
+    create() {
+      const centerX = GAME_WIDTH / 2;
+      const centerY = GAME_HEIGHT / 2;
+
+      // Container for entire mini-game
+      this.container = this.scene.add.container(0, 0);
+      this.container.setDepth(100);
+
+      // Semi-transparent overlay
+      const overlay = this.scene.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, COLORS.BLACK, 0.7)
+        .setOrigin(0);
+      this.container.add(overlay);
+
+      // GameBoy-style window
+      const windowWidth = 500;
+      const windowHeight = 350;
+
+      // White outer border (GameBoy style)
+      const outerBorder = this.scene.add.rectangle(centerX, centerY, windowWidth + 20, windowHeight + 20, COLORS.WHITE)
+        .setStrokeStyle(4, COLORS.BLACK);
+      this.container.add(outerBorder);
+
+      // Inner window
+      const window = this.scene.add.rectangle(centerX, centerY, windowWidth, windowHeight, 0x9BBC0F)
+        .setStrokeStyle(4, 0x0F380F);
+      this.container.add(window);
+
+      // Title bar
+      const titleBg = this.scene.add.rectangle(centerX, centerY - 140, windowWidth - 20, 50, 0x0F380F);
+      this.container.add(titleBg);
+
+      const title = this.scene.add.text(centerX, centerY - 140, '🎣 FISHING MINI-GAME', {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.container.add(title);
+
+      // Instructions text
+      this.instructionText = this.scene.add.text(centerX, centerY - 80, 'Wait for the fish to bite...', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fill: '#0F380F'
+      }).setOrigin(0.5);
+      this.container.add(this.instructionText);
+
+      // Fishing rod visual
+      const rod = this.scene.add.rectangle(centerX - 100, centerY - 20, 8, 120, 0x8B4513);
+      this.container.add(rod);
+
+      // Fishing line
+      this.fishingLine = this.scene.add.line(0, centerX - 100, centerY + 40, centerX + 50, centerY + 60, 0x0F380F)
+        .setLineWidth(2);
+      this.container.add(this.fishingLine);
+
+      // Hook
+      this.hook = this.scene.add.circle(centerX + 50, centerY + 60, 8, COLORS.BLACK);
+      this.container.add(this.hook);
+
+      // Arrow UI container (hidden initially)
+      this.arrowContainer = this.scene.add.container(centerX, centerY + 60);
+      this.arrowContainer.setVisible(false);
+      this.container.add(this.arrowContainer);
+
+      // Create arrow track
+      const trackWidth = 300;
+      const track = this.scene.add.rectangle(0, 0, trackWidth, 60, 0x0F380F);
+      this.arrowContainer.add(track);
+
+      const trackInner = this.scene.add.rectangle(0, 0, trackWidth - 8, 52, 0x8BAC0F);
+      this.arrowContainer.add(trackInner);
+
+      // Target zone (changes position)
+      this.targetZone = this.scene.add.rectangle(0, 0, 50, 52, COLORS.GREEN, 0.5)
+        .setStrokeStyle(3, COLORS.GREEN);
+      this.arrowContainer.add(this.targetZone);
+
+      // Player arrow (you control this)
+      this.playerArrow = this.scene.add.triangle(0, 0, 0, -20, -15, 20, 15, 20, COLORS.RED);
+      this.arrowContainer.add(this.playerArrow);
+
+      // Progress bar for reeling
+      this.progressBar = this.scene.add.rectangle(centerX, centerY + 130, 0, 20, COLORS.GREEN)
+        .setOrigin(0, 0.5);
+      this.progressBar.setVisible(false);
+      this.container.add(this.progressBar);
+
+      // Result fish display
+      this.resultFish = this.scene.add.image(centerX, centerY + 20, 'fish', 'fish_blue')
+        .setScale(5)
+        .setVisible(false);
+      this.container.add(this.resultFish);
+
+      // Close button (only shows after completion)
+      this.closeButton = this.scene.add.rectangle(centerX, centerY + 130, 150, 40, 0x0F380F)
+        .setInteractive({ useHandCursor: true })
+        .setVisible(false);
+      this.container.add(this.closeButton);
+
+      const closeText = this.scene.add.text(centerX, centerY + 130, 'CLOSE', {
+        fontSize: '20px',
+        fill: '#9BBC0F',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      closeText.setVisible(false);
+      this.container.add(closeText);
+
+      this.closeButton.on('pointerdown', () => this.close());
+      this.closeButtonText = closeText;
+
+      // Start the fishing sequence
+      this.startWaitingPhase();
+
+      // Input handling
+      this.scene.input.keyboard.on('keydown-SPACE', () => this.onSpacePress());
+      this.scene.input.on('pointerdown', () => this.onSpacePress());
+    }
+
+    startWaitingPhase() {
+      this.state = 'waiting';
+      this.instructionText.setText('Wait for the fish to bite...');
+
+      // Animate hook bobbing
+      this.scene.tweens.add({
+        targets: [this.hook, this.fishingLine],
+        y: '+=10',
+        duration: 800,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+
+      // Random delay before fish bites (1-3 seconds)
+      const delay = Phaser.Math.Between(1000, 3000);
+      this.hookTimer = this.scene.time.delayedCall(delay, () => {
+        this.startHookingPhase();
+      });
+    }
+
+    startHookingPhase() {
+      this.state = 'hooking';
+      this.instructionText.setText('❗ PRESS SPACE or CLICK NOW! ❗');
+      this.instructionText.setFontSize('22px');
+      this.instructionText.setStyle({ fill: '#FF0000' });
+
+      // Make hook shake
+      this.scene.tweens.killTweensOf([this.hook, this.fishingLine]);
+      this.scene.tweens.add({
+        targets: [this.hook, this.fishingLine],
+        x: '+=5',
+        duration: 100,
+        yoyo: true,
+        repeat: 10
+      });
+
+      // Short window to press (1.5 seconds)
+      this.hookTimer = this.scene.time.delayedCall(1500, () => {
+        if (this.state === 'hooking') {
+          this.fail('Too slow!');
+        }
+      });
+    }
+
+    startReelingPhase() {
+      this.state = 'reeling';
+      this.instructionText.setText('Keep the arrow in the green zone!');
+      this.instructionText.setFontSize('18px');
+      this.instructionText.setStyle({ fill: '#0F380F' });
+
+      // Select random fish
+      const rarityRoll = Math.random();
+      let fishPool;
+      if (rarityRoll < 0.5) {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Common');
+      } else if (rarityRoll < 0.8) {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Uncommon');
+      } else if (rarityRoll < 0.95) {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Rare');
+      } else {
+        fishPool = FISH_TYPES.filter(f => f.rarity === 'Epic');
+      }
+      this.selectedFish = Phaser.Utils.Array.GetRandom(fishPool);
+
+      // Show arrow UI
+      this.arrowContainer.setVisible(true);
+      this.progressBar.setVisible(true);
+      this.hook.setVisible(false);
+      this.fishingLine.setVisible(false);
+
+      // Initialize positions
+      this.playerPosition = 0;
+      this.targetPosition = Phaser.Math.Between(-100, 100);
+      this.targetZone.setX(this.targetPosition);
+
+      // Update loop
+      this.reelingTime = 0;
+      this.reelingUpdate = this.scene.time.addEvent({
+        delay: 50,
+        callback: () => this.updateReeling(),
+        loop: true
+      });
+    }
+
+    updateReeling() {
+      this.reelingTime += 50;
+
+      // Move target zone randomly
+      if (Math.random() < 0.1) {
+        this.targetPosition = Phaser.Math.Between(-100, 100);
+        this.scene.tweens.add({
+          targets: this.targetZone,
+          x: this.targetPosition,
+          duration: 300,
+          ease: 'Sine.easeInOut'
+        });
+      }
+
+      // Check if player arrow is in target zone
+      const distance = Math.abs(this.playerPosition - this.targetPosition);
+      const inZone = distance < 40;
+
+      if (inZone) {
+        // Progress increases
+        const progress = (this.reelingTime / this.maxReelingTime) * 300;
+        this.progressBar.setSize(progress, 20);
+
+        if (this.reelingTime >= this.maxReelingTime) {
+          this.success();
+        }
+      } else {
+        // Progress decreases
+        this.reelingTime = Math.max(0, this.reelingTime - 100);
+        const progress = (this.reelingTime / this.maxReelingTime) * 300;
+        this.progressBar.setSize(progress, 20);
+      }
+    }
+
+    onSpacePress() {
+      if (this.state === 'hooking') {
+        this.startReelingPhase();
+      } else if (this.state === 'reeling') {
+        // Move player arrow left on press
+        this.playerPosition -= 30;
+        this.playerPosition = Phaser.Math.Clamp(this.playerPosition, -130, 130);
+        this.scene.tweens.add({
+          targets: this.playerArrow,
+          x: this.playerPosition,
+          duration: 100,
+          ease: 'Power2'
+        });
+      }
+    }
+
+    success() {
+      this.state = 'success';
+      this.reelingUpdate.destroy();
+
+      this.instructionText.setText(`🎉 You caught a ${this.selectedFish.displayName}! 🎉`);
+      this.instructionText.setFontSize('20px');
+      this.instructionText.setStyle({ fill: '#0F380F' });
+
+      this.arrowContainer.setVisible(false);
+      this.progressBar.setVisible(false);
+
+      // Show caught fish
+      this.resultFish.setTexture('fish', this.selectedFish.id);
+      this.resultFish.setVisible(true);
+
+      // Animate fish
+      this.resultFish.setScale(0);
+      this.scene.tweens.add({
+        targets: this.resultFish,
+        scale: 6,
+        duration: 500,
+        ease: 'Back.easeOut'
+      });
+
+      // Show rarity
+      const rarityText = this.scene.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80,
+        `[${this.selectedFish.rarity}]`, {
+        fontSize: '16px',
+        fill: '#0F380F',
+        fontStyle: 'italic'
+      }).setOrigin(0.5);
+      this.container.add(rarityText);
+
+      this.showCloseButton();
+    }
+
+    fail(reason) {
+      this.state = 'fail';
+      if (this.reelingUpdate) this.reelingUpdate.destroy();
+
+      this.instructionText.setText(`❌ ${reason}`);
+      this.instructionText.setStyle({ fill: '#FF0000' });
+
+      this.arrowContainer.setVisible(false);
+      this.progressBar.setVisible(false);
+      this.hook.setVisible(false);
+      this.fishingLine.setVisible(false);
+
+      this.showCloseButton();
+    }
+
+    showCloseButton() {
+      this.closeButton.setVisible(true);
+      this.closeButtonText.setVisible(true);
+
+      // Hover effect
+      this.closeButton.on('pointerover', () => {
+        this.closeButton.setFillStyle(0x8BAC0F);
+      });
+      this.closeButton.on('pointerout', () => {
+        this.closeButton.setFillStyle(0x0F380F);
+      });
+    }
+
+    close() {
+      const success = this.state === 'success';
+      const fish = success ? this.selectedFish : null;
+
+      // Cleanup
+      this.scene.input.keyboard.off('keydown-SPACE');
+      if (this.hookTimer) this.hookTimer.destroy();
+      if (this.reelingUpdate) this.reelingUpdate.destroy();
+      this.container.destroy();
+
+      // Callback
+      this.onComplete(success, fish);
+    }
+  }
+
+  // Player arrow drifts right naturally (using GameState instead of global window)
+  setInterval(() => {
+    if (GameState.currentFishingGame && GameState.currentFishingGame.state === 'reeling') {
+      const game = GameState.currentFishingGame;
+      game.playerPosition += 2;
+      game.playerPosition = Phaser.Math.Clamp(game.playerPosition, -130, 130);
+      game.scene.tweens.add({
+        targets: game.playerArrow,
+        x: game.playerPosition,
+        duration: 50,
+        ease: 'Linear'
+      });
+    }
+  }, 50);
+
+  // Make fishing game accessible through GameState for drift mechanic
+  const originalCreate = FishingMinigame.prototype.create;
+  FishingMinigame.prototype.create = function() {
+    GameState.currentFishingGame = this;
+    originalCreate.call(this);
+  };
+
+  const originalClose = FishingMinigame.prototype.close;
+  FishingMinigame.prototype.close = function() {
+    GameState.currentFishingGame = null;
+    originalClose.call(this);
+  };
+
+  // ===== TOUCH CONTROLS =====
+  (function initTouchControls() {
+    const touchControls = document.getElementById('touch-controls');
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    // Show controls on touch devices
+    if (isTouchDevice) {
+      touchControls.classList.add('visible');
+    }
+
+    // Map of active touches
+    const activeTouches = new Set();
+
+    // Simulate keyboard events for game
+    const keyMap = {
+      'up': 'ArrowUp',
+      'down': 'ArrowDown',
+      'left': 'ArrowLeft',
+      'right': 'ArrowRight',
+      'space': ' ',
+      'c': 'c'
+    };
+
+    // Handle touch button press
+    document.querySelectorAll('.touch-btn').forEach(btn => {
+      const key = btn.dataset.key;
+
+      const handleStart = (e) => {
+        e.preventDefault();
+        if (!activeTouches.has(key)) {
+          activeTouches.add(key);
+          // Dispatch keyboard event to game
+          const event = new KeyboardEvent('keydown', {
+            key: keyMap[key],
+            code: keyMap[key] === ' ' ? 'Space' : 'Key' + keyMap[key].toUpperCase(),
+            bubbles: true
+          });
+          document.dispatchEvent(event);
+        }
+      };
+
+      const handleEnd = (e) => {
+        e.preventDefault();
+        if (activeTouches.has(key)) {
+          activeTouches.delete(key);
+          // Dispatch keyup event
+          const event = new KeyboardEvent('keyup', {
+            key: keyMap[key],
+            code: keyMap[key] === ' ' ? 'Space' : 'Key' + keyMap[key].toUpperCase(),
+            bubbles: true
+          });
+          document.dispatchEvent(event);
+        }
+      };
+
+      // Touch events
+      btn.addEventListener('touchstart', handleStart, {passive: false});
+      btn.addEventListener('touchend', handleEnd, {passive: false});
+      btn.addEventListener('touchcancel', handleEnd, {passive: false});
+
+      // Mouse events (for testing on desktop)
+      btn.addEventListener('mousedown', handleStart);
+      btn.addEventListener('mouseup', handleEnd);
+      btn.addEventListener('mouseleave', handleEnd);
+    });
+  })();
+
+  // ===== GAME INITIALIZATION =====
+  new Phaser.Game({
+    type: Phaser.AUTO,
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
+    parent: 'game-container',
+    backgroundColor: COLORS.SKY,
+    scene: TropicalIslandScene,
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    render: { pixelArt: true, antialias: false, roundPixels: true }
+  });
+  </script>
+</body>
+</html>
