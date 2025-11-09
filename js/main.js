@@ -44,6 +44,11 @@ async function init() {
     console.log('Loading assets...');
     await game.assetLoader.loadAll([
       {
+        type: 'image',
+        key: 'island',
+        path: 'island_bg.png'
+      },
+      {
         type: 'atlas',
         key: 'fish',
         imagePath: 'fish_characters.png',

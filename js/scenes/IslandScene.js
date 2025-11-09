@@ -15,6 +15,9 @@ export class IslandScene {
   }
 
   create() {
+    // Load island background image
+    this.islandImage = this.game.assetLoader.getImage('island');
+
     // Player setup
     this.player = new Player(400, 300, this.game.assetLoader);
 
@@ -78,23 +81,24 @@ export class IslandScene {
   render(ctx) {
     const atlas = this.game.assetLoader;
 
-    // Draw background - simple sky and ground
-    ctx.fillStyle = '#87CEEB'; // Sky
-    ctx.fillRect(0, 0, 800, 200);
+    // Draw static island background
+    ctx.clearRect(0, 0, this.game.width, this.game.height);
+    ctx.drawImage(
+      this.islandImage,
+      0, 0, this.islandImage.width, this.islandImage.height,
+      0, 0, this.game.width, this.game.height
+    );
 
-    ctx.fillStyle = '#F4D03F'; // Sand
-    ctx.fillRect(0, 200, 800, 400);
-
-    // Draw water edges
-    ctx.fillStyle = '#2E86AB';
-    ctx.fillRect(0, 430, 300, 170); // Left water
-    ctx.fillRect(500, 430, 300, 170); // Right water
-
-    // Draw decorations
-    this.renderDecorations(ctx, atlas);
-
-    // Draw obstacles (for visual reference - palms, rocks, bushes)
-    this.renderObstacles(ctx, atlas);
+    // OLD tile-based rendering (commented out)
+    // ctx.fillStyle = '#87CEEB'; // Sky
+    // ctx.fillRect(0, 0, 800, 200);
+    // ctx.fillStyle = '#F4D03F'; // Sand
+    // ctx.fillRect(0, 200, 800, 400);
+    // ctx.fillStyle = '#2E86AB';
+    // ctx.fillRect(0, 430, 300, 170); // Left water
+    // ctx.fillRect(500, 430, 300, 170); // Right water
+    // this.renderDecorations(ctx, atlas);
+    // this.renderObstacles(ctx, atlas);
 
     // Draw player
     this.player.render(ctx);
