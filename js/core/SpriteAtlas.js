@@ -1,6 +1,8 @@
 /**
  * SpriteAtlas - helper for drawing sprites from atlases
  */
+import { mapFrameName } from '../utils/frameMapping.js';
+
 export class SpriteAtlas {
   constructor(assetLoader) {
     this.assetLoader = assetLoader;
@@ -22,9 +24,11 @@ export class SpriteAtlas {
       return;
     }
 
-    const frame = atlas.frames[frameName];
+    // Map old frame names to new grid-based names
+    const mappedFrameName = mapFrameName(frameName);
+    const frame = atlas.frames[mappedFrameName];
     if (!frame) {
-      console.warn(`Frame '${frameName}' not found in atlas '${atlasKey}'`);
+      console.warn(`Frame '${mappedFrameName}' (original: '${frameName}') not found in atlas '${atlasKey}'`);
       return;
     }
 
@@ -46,7 +50,8 @@ export class SpriteAtlas {
     const atlas = this.assetLoader.getAtlas(atlasKey);
     if (!atlas) return null;
 
-    const frame = atlas.frames[frameName];
+    const mappedFrameName = mapFrameName(frameName);
+    const frame = atlas.frames[mappedFrameName];
     if (!frame) return null;
 
     return { w: frame.frame.w, h: frame.frame.h };
@@ -58,6 +63,7 @@ export class SpriteAtlas {
   hasFrame(atlasKey, frameName) {
     const atlas = this.assetLoader.getAtlas(atlasKey);
     if (!atlas) return false;
-    return !!atlas.frames[frameName];
+    const mappedFrameName = mapFrameName(frameName);
+    return !!atlas.frames[mappedFrameName];
   }
 }

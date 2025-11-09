@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sprite Atlas Diagnostic</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #1a1a1a;
+      color: #00ff00;
+      padding: 20px;
+    }
+    canvas {
+      border: 2px solid #00ff00;
+      image-rendering: pixelated;
+      margin: 10px;
+      background: #000;
+    }
+    h2 {
+      color: #ffaa00;
+    }
+    .grid-info {
+      background: #000;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #00ff00;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Sprite Atlas Diagnostic Tool</h1>
+  <p>Visual verification of sprite atlases with 64x64 grid</p>
+
+  <div class="grid-info">
+    <h2>Fish Characters Atlas</h2>
+    <p>Dimensions: 508 x 134 pixels</p>
+    <p>Grid: 64x64 tiles</p>
+    <p>Frames: 7 columns × 2 rows = 14 sprites</p>
+    <p>Frame names: fish_0 through fish_13</p>
+  </div>
+  <canvas id="fishCanvas"></canvas>
+
+  <div class="grid-info">
+    <h2>Terrain & Flora Atlas</h2>
+    <p>Dimensions: 464 x 224 pixels</p>
+    <p>Grid: 64x64 tiles</p>
+    <p>Frames: 7 columns × 3 rows = 21 sprites (some rows partial)</p>
+    <p>Frame names: terrain_0 through terrain_20</p>
+  </div>
+  <canvas id="terrainCanvas"></canvas>
+
+  <script type="module">
+    async function loadAndDisplay() {
+      // Load JSON
+      const fishData = await fetch('fish_characters.json').then(r => r.json());
+      const terrainData = await fetch('terrain_flora.json').then(r => r.json());
+
+      // Load images
+      const fishImg = new Image();
+      fishImg.src = 'fish_characters.png';
+
+      const terrainImg = new Image();
+      terrainImg.src = 'terrain_flora.png';
+
+      await Promise.all([
+        new Promise(resolve => fishImg.onload = resolve),
+        new Promise(resolve => terrainImg.onload = resolve)
+      ]);
+
+      // Draw fish atlas
+      const fishCanvas = document.getElementById('fishCanvas');
+      fishCanvas.width = 508;
+      fishCanvas.height = 134;
+      const fishCtx = fishCanvas.getContext('2d');
+      fishCtx.imageSmoothingEnabled = false;
+
+      fishCtx.drawImage(fishImg, 0, 0);
+
+      // Draw grid lines over fish atlas
+      fishCtx.strokeStyle = '#ff0000';
+      fishCtx.lineWidth = 1;
+      for (let x = 0; x <= 508; x += 64) {
+        fishCtx.beginPath();
+        fishCtx.moveTo(x, 0);
+        fishCtx.lineTo(x, 134);
+        fishCtx.stroke();
+      }
+      for (let y = 0; y <= 134; y += 64) {
+        fishCtx.beginPath();
+        fishCtx.moveTo(0, y);
+        fishCtx.lineTo(508, y);
+        fishCtx.stroke();
+      }
+
+      // Draw frame numbers
+      fishCtx.fillStyle = '#ffff00';
+      fishCtx.font = 'bold 12px monospace';
+      let frameNum = 0;
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 7; col++) {
+          fishCtx.fillText(`fish_${frameNum}`, col * 64 + 5, row * 64 + 15);
+          frameNum++;
+        }
+      }
+
+      // Draw terrain atlas
+      const terrainCanvas = document.getElementById('terrainCanvas');
+      terrainCanvas.width = 464;
+      terrainCanvas.height = 224;
+      const terrainCtx = terrainCanvas.getContext('2d');
+      terrainCtx.imageSmoothingEnabled = false;
+
+      terrainCtx.drawImage(terrainImg, 0, 0);
+
+      // Draw grid lines over terrain atlas
+      terrainCtx.strokeStyle = '#ff0000';
+      terrainCtx.lineWidth = 1;
+      for (let x = 0; x <= 464; x += 64) {
+        terrainCtx.beginPath();
+        terrainCtx.moveTo(x, 0);
+        terrainCtx.lineTo(x, 224);
+        terrainCtx.stroke();
+      }
+      for (let y = 0; y <= 224; y += 64) {
+        terrainCtx.beginPath();
+        terrainCtx.moveTo(0, y);
+        terrainCtx.lineTo(464, y);
+        terrainCtx.stroke();
+      }
+
+      // Draw frame numbers
+      terrainCtx.fillStyle = '#ffff00';
+      terrainCtx.font = 'bold 12px monospace';
+      frameNum = 0;
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 7; col++) {
+          terrainCtx.fillText(`terrain_${frameNum}`, col * 64 + 5, row * 64 + 15);
+          frameNum++;
+        }
+      }
+
+      console.log('Fish atlas frames:', Object.keys(fishData.frames));
+      console.log('Terrain atlas frames:', Object.keys(terrainData.frames));
+    }
+
+    loadAndDisplay().catch(err => {
+      console.error('Error loading atlases:', err);
+      document.body.innerHTML += `<div style="color:red">ERROR: ${err.message}</div>`;
+    });
+  </script>
+</body>
+</html>
