@@ -40,10 +40,10 @@ export class Interactable {
     }
   }
 
-  render(ctx, spriteAtlas, atlasKey, frameName) {
+  render(ctx, spriteAtlas, atlasKey, frameName, scale = 1) {
     // Render sprite if provided
     if (spriteAtlas && atlasKey && frameName) {
-      spriteAtlas.drawSprite(ctx, atlasKey, frameName, this.x, this.y, 1);
+      spriteAtlas.drawSprite(ctx, atlasKey, frameName, this.x, this.y, scale);
     } else {
       // Debug visualization
       ctx.fillStyle = 'rgba(0, 100, 200, 0.3)';
