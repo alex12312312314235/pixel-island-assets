@@ -105,17 +105,22 @@ export class IslandScene {
 
     // Draw interactables
     for (const interactable of this.interactables) {
-      // Use appropriate sprites for each interactable
+      // Use appropriate sprites for each interactable with proper scaling
       let frameName = 'rock_small_1';
+      let scale = 1;
+
       if (interactable.label === 'Go Fishing') {
-        frameName = 'wave_shallow'; // Fishing spot
+        frameName = 'sand_rect'; // Fishing spot - 96×56, better coverage than wave_shallow
+        scale = 1.0;
       } else if (interactable.label === 'Count Fish') {
-        frameName = 'bush_medium'; // Counting hut
+        frameName = 'bush_large'; // Counting hut - 64×64, full coverage
+        scale = 1.0;
       } else if (interactable.label === 'Learn Letters') {
-        frameName = 'rock_cluster'; // Letter area
+        frameName = 'bush_medium'; // Letter area - 64×64, full coverage
+        scale = 1.0;
       }
 
-      interactable.render(ctx, atlas, 'terrain', frameName);
+      interactable.render(ctx, atlas, 'terrain', frameName, scale);
     }
 
     // Draw UI

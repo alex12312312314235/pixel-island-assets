@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Island Render Debug</title>
+  <style>
+    body { margin: 0; padding: 20px; background: #333; font-family: monospace; }
+    canvas { border: 2px solid #fff; background: #000; image-rendering: pixelated; }
+    .info { color: #fff; margin: 10px 0; }
+    .box { display: inline-block; width: 20px; height: 20px; border: 1px solid #fff; margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <h2 style="color: #fff;">Island Scene Debug Visualization</h2>
+  <div class="info">
+    Interactables:
+    <span class="box" style="background: rgba(0,100,200,0.5);"></span> Debug fallback
+    <span class="box" style="background: #ff0000;"></span> Fishing (250,450)
+    <span class="box" style="background: #00ff00;"></span> Counting (150,200)
+    <span class="box" style="background: #0000ff;"></span> Letters (550,220)
+  </div>
+  <canvas id="canvas" width="800" height="600"></canvas>
+  <pre id="log" style="color: #0f0; margin-top: 20px;"></pre>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const log = document.getElementById('log');
+    let logText = '';
+
+    function addLog(msg) {
+      logText += msg + '\n';
+      log.textContent = logText;
+      console.log(msg);
+    }
+
+    async function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    async function loadAtlas(imagePath, jsonPath) {
+      const img = await loadImage(imagePath);
+      const response = await fetch(jsonPath);
+      const data = await response.json();
+      return { image: img, frames: data.frames };
+    }
+
+    function drawSprite(atlas, frameName, x, y, scale = 1) {
+      const frame = atlas.frames[frameName];
+      if (!frame) {
+        addLog(`❌ Frame '${frameName}' not found`);
+        // Draw red X
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 50, y + 50);
+        ctx.moveTo(x + 50, y);
+        ctx.lineTo(x, y + 50);
+        ctx.stroke();
+        return;
+      }
+
+      const f = frame.frame;
+      const width = f.w * scale;
+      const height = f.h * scale;
+
+      addLog(`✓ Drawing '${frameName}' at (${x},${y}) size ${f.w}×${f.h} scale ${scale} = ${width}×${height}`);
+
+      ctx.drawImage(
+        atlas.image,
+        f.x, f.y, f.w, f.h,
+        x, y, width, height
+      );
+
+      // Draw bounding box
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, width, height);
+    }
+
+    async function init() {
+      try {
+        addLog('=== LOADING ASSETS ===');
+        const islandBg = await loadImage('island_bg.png');
+        addLog(`✓ Loaded island_bg.png: ${islandBg.width}×${islandBg.height}`);
+
+        const terrainAtlas = await loadAtlas('terrain_flora.png', 'terrain_flora.json');
+        addLog(`✓ Loaded terrain atlas: ${Object.keys(terrainAtlas.frames).length} frames`);
+
+        const fishAtlas = await loadAtlas('fish_characters.png', 'fish_characters.json');
+        addLog(`✓ Loaded fish atlas: ${Object.keys(fishAtlas.frames).length} frames`);
+
+        addLog('\n=== RENDERING ===');
+
+        // Draw background
+        ctx.drawImage(islandBg, 0, 0, islandBg.width, islandBg.height, 0, 0, 800, 600);
+        addLog('✓ Drew island background');
+
+        // Draw player
+        addLog('\nPlayer at (400,300):');
+        drawSprite(fishAtlas, 'char_child', 400, 300, 1);
+
+        // Interactable positions and sizes
+        const interactables = [
+          { x: 250, y: 450, w: 50, h: 50, label: 'Fishing', sprite: 'wave_shallow', color: '#ff0000' },
+          { x: 150, y: 200, w: 50, h: 50, label: 'Counting', sprite: 'bush_medium', color: '#00ff00' },
+          { x: 550, y: 220, w: 50, h: 50, label: 'Letters', sprite: 'rock_cluster', color: '#0000ff' }
+        ];
+
+        addLog('\n=== INTERACTABLES ===');
+
+        for (const inter of interactables) {
+          addLog(`\n${inter.label} at (${inter.x},${inter.y}) expecting ${inter.w}×${inter.h}:`);
+
+          // Draw colored outline to show expected area
+          ctx.strokeStyle = inter.color;
+          ctx.lineWidth = 3;
+          ctx.strokeRect(inter.x, inter.y, inter.w, inter.h);
+
+          // Try to draw sprite
+          drawSprite(terrainAtlas, inter.sprite, inter.x, inter.y, 1);
+        }
+
+        addLog('\n=== SUMMARY ===');
+        addLog('Yellow boxes = actual sprite size');
+        addLog('Colored boxes = expected interactable areas (50×50)');
+        addLog('If sprite smaller than colored box, white background will show through');
+
+      } catch (error) {
+        addLog(`❌ ERROR: ${error.message}`);
+        console.error(error);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
